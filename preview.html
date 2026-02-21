@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CartQuant — Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { height: 100%; margin: 0; font-family: 'Inter', sans-serif; }
+  * { box-sizing: border-box; }
+  .overflow-y-auto { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+  .overflow-y-auto::-webkit-scrollbar { width: 6px; }
+  .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
+  .overflow-y-auto::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 3px; }
+  .item-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .item-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .fade-slide-in {
+    animation: fadeSlideIn 0.25s ease-out;
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .book-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.35);
+  }
+  .swap-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+</style>
+</head>
+<body class="h-full bg-white text-gray-900" style="font-family:'Inter',sans-serif;">
+
+<!-- ChatGPT-like chrome -->
+<div class="h-full flex">
+  <!-- Sidebar -->
+  <div class="w-[260px] shrink-0 bg-[#202123] flex flex-col">
+    <div class="p-4 border-b border-white/10">
+      <button class="w-full flex items-center gap-2 text-white/90 text-sm font-medium px-3 py-2.5 rounded-lg border border-white/20 hover:bg-white/5 transition">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        New chat
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-2 space-y-0.5">
+      <div class="text-xs text-white/40 px-3 py-2 uppercase tracking-wider">Today</div>
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 text-white text-sm">
+        <span class="truncate">Compare grocery basket SF</span>
+      </div>
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg text-white/70 text-sm hover:bg-white/5 cursor-pointer">
+        <span class="truncate">Meal prep for the week</span>
+      </div>
+    </div>
+    <div class="p-4 border-t border-white/10">
+      <div class="flex items-center gap-2 text-white/80 text-sm">
+        <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">U</div>
+        <span>User</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main chat area -->
+  <div class="flex-1 flex flex-col min-w-0 bg-[#343541]">
+    <!-- Chat header -->
+    <div class="flex items-center justify-center py-2 border-b border-white/10">
+      <span class="text-white/60 text-sm font-medium">ChatGPT <span class="text-white/30">4</span></span>
+    </div>
+
+    <!-- Messages -->
+    <div class="flex-1 overflow-y-auto">
+      <!-- User message -->
+      <div class="bg-[#343541] py-6">
+        <div class="max-w-3xl mx-auto px-6 flex gap-4">
+          <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0">U</div>
+          <div class="text-white/90 text-sm leading-relaxed pt-1">
+            Compare prices, health scores and price predictions for a grocery basket with milk, eggs, cereal, yogurt, bread, and chicken across SF stores.
+          </div>
+        </div>
+      </div>
+
+      <!-- Assistant message with widget -->
+      <div class="bg-[#444654] py-6">
+        <div class="max-w-3xl mx-auto px-6 flex gap-4">
+          <div class="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M8 1.5a.75.75 0 01.75.75v2a.75.75 0 01-1.5 0v-2A.75.75 0 018 1.5zm4.95 2.05a.75.75 0 010 1.06l-1.41 1.41a.75.75 0 11-1.06-1.06l1.41-1.41a.75.75 0 011.06 0zM14.5 8a.75.75 0 01-.75.75h-2a.75.75 0 010-1.5h2A.75.75 0 0114.5 8zm-2.05 4.95a.75.75 0 01-1.06 0l-1.41-1.41a.75.75 0 111.06-1.06l1.41 1.41a.75.75 0 010 1.06zM8 14.5a.75.75 0 01-.75-.75v-2a.75.75 0 011.5 0v2a.75.75 0 01-.75.75zm-4.95-2.05a.75.75 0 010-1.06l1.41-1.41a.75.75 0 111.06 1.06l-1.41 1.41a.75.75 0 01-1.06 0zM1.5 8a.75.75 0 01.75-.75h2a.75.75 0 010 1.5h-2A.75.75 0 011.5 8zm2.05-4.95a.75.75 0 011.06 0l1.41 1.41a.75.75 0 01-1.06 1.06L3.55 4.11a.75.75 0 010-1.06z"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-white/90 text-sm leading-relaxed mb-3">
+              Here's your grocery basket comparison across 5 San Francisco stores. I've analyzed price, health scores, and 7-day price predictions to build an optimal basket plan. Click any item to compare alternatives.
+            </div>
+            <!-- Widget container -->
+            <div id="widget-root" class="rounded-xl overflow-hidden border border-white/10 bg-white" style="height: 640px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ───
+
+var STORES = [
+  { name: "Trader Joe's", lat: 37.7649, lng: -122.4194 },
+  { name: "Whole Foods", lat: 37.7879, lng: -122.4074 },
+  { name: "Safeway", lat: 37.7749, lng: -122.4294 },
+  { name: "Kroger", lat: 37.7549, lng: -122.4094 },
+  { name: "Target", lat: 37.7849, lng: -122.4394 },
+];
+
+var DEMO_ITEMS = ["milk", "eggs", "cereal", "yogurt", "bread", "chicken"];
+
+var FLAGGED_INGREDIENTS = ["rBST", "Growth Hormone", "Red 40", "Yellow 6", "Blue 1", "BHT", "Partially Hydrogenated", "High Fructose Corn Syrup", "Artificial", "Sodium Phosphate", "Carrageenan", "Sodium Stearoyl Lactylate", "DATEM", "Calcium Peroxide", "Potassium Sorbate", "Natural and Artificial Flavors"];
+
+var allItemAlternatives = {
+  milk: [
+    { product: { name: "Organic Whole Milk", brand: "Trader Joe's", size: "1 gal", store: "Trader Joe's", priceUsd: 4.49 }, health: { score: 88, flags: [], summary: "Organic, no hormones, good value." }, prediction: { direction: "flat", percentChange: 0.6, confidence: 79, recommendation: "Stable price, buy anytime." }, ingredients: ["Organic Grade A Milk", "Vitamin D3"] },
+    { product: { name: "Organic Valley Whole Milk", brand: "Organic Valley", size: "1 gal", store: "Whole Foods", priceUsd: 6.49 }, health: { score: 95, flags: [], summary: "Pasture-raised, organic, no hormones or antibiotics." }, prediction: { direction: "flat", percentChange: 0.3, confidence: 85, recommendation: "Stable organic dairy pricing." }, ingredients: ["Organic Pasteurized Whole Milk", "Vitamin D3"] },
+    { product: { name: "Lucerne Whole Milk", brand: "Lucerne", size: "1 gal", store: "Safeway", priceUsd: 3.99 }, health: { score: 70, flags: ["rBST hormones"], summary: "Conventional milk, standard nutrition." }, prediction: { direction: "rising", percentChange: 2.1, confidence: 72, recommendation: "Prices climbing, buy soon." }, ingredients: ["Grade A Milk", "Vitamin A Palmitate", "Vitamin D3", "rBST (Growth Hormone)"] },
+    { product: { name: "Great Value Whole Milk", brand: "Great Value", size: "1 gal", store: "Kroger", priceUsd: 3.29 }, health: { score: 72, flags: ["rBST hormones"], summary: "Standard conventional milk, adequate nutrition." }, prediction: { direction: "rising", percentChange: 4.1, confidence: 81, recommendation: "Buy now, dairy prices rising regionally." }, ingredients: ["Grade A Milk", "Vitamin A Palmitate", "Vitamin D3"] },
+    { product: { name: "Good & Gather Whole Milk", brand: "Good & Gather", size: "1 gal", store: "Target", priceUsd: 4.19 }, health: { score: 74, flags: [], summary: "Conventional but hormone-free milk." }, prediction: { direction: "flat", percentChange: 0.8, confidence: 76, recommendation: "Stable, buy anytime." }, ingredients: ["Grade A Milk", "Vitamin D3"] },
+  ],
+  eggs: [
+    { product: { name: "Free Range Eggs", brand: "Trader Joe's", size: "12 ct", store: "Trader Joe's", priceUsd: 4.99 }, health: { score: 83, flags: [], summary: "Free range, no antibiotics." }, prediction: { direction: "falling", percentChange: 1.8, confidence: 64, recommendation: "Prices easing, can wait a few days." }, ingredients: ["Free Range Eggs"] },
+    { product: { name: "Vital Farms Pasture-Raised Eggs", brand: "Vital Farms", size: "12 ct", store: "Whole Foods", priceUsd: 7.99 }, health: { score: 97, flags: [], summary: "Pasture-raised, certified humane, no antibiotics." }, prediction: { direction: "falling", percentChange: 1.5, confidence: 62, recommendation: "Slight drop expected, can wait." }, ingredients: ["Pasture-Raised Eggs"] },
+    { product: { name: "Lucerne Cage-Free Eggs", brand: "Lucerne", size: "12 ct", store: "Safeway", priceUsd: 4.29 }, health: { score: 75, flags: ["cage-free"], summary: "Cage-free but conventional feed." }, prediction: { direction: "flat", percentChange: 0.5, confidence: 70, recommendation: "Stable pricing." }, ingredients: ["Cage-Free Eggs"] },
+    { product: { name: "Goldhen Cage-Free Eggs", brand: "Goldhen", size: "12 ct", store: "Kroger", priceUsd: 3.49 }, health: { score: 78, flags: ["cage-free"], summary: "Cage-free but conventional feed." }, prediction: { direction: "falling", percentChange: 2.3, confidence: 66, recommendation: "Wait if possible, prices softening." }, ingredients: ["Cage-Free Eggs"] },
+    { product: { name: "Good & Gather Free Range Eggs", brand: "Good & Gather", size: "12 ct", store: "Target", priceUsd: 4.79 }, health: { score: 80, flags: [], summary: "Free range, no antibiotics." }, prediction: { direction: "flat", percentChange: 0.4, confidence: 73, recommendation: "Price is stable." }, ingredients: ["Free Range Eggs"] },
+  ],
+  cereal: [
+    { product: { name: "Organic O's", brand: "Trader Joe's", size: "14 oz", store: "Trader Joe's", priceUsd: 3.29 }, health: { score: 82, flags: ["added sugar"], summary: "Organic with modest sugar, no artificial ingredients." }, prediction: { direction: "flat", percentChange: 0.3, confidence: 87, recommendation: "Stable." }, ingredients: ["Organic Oat Flour", "Organic Cane Sugar", "Sea Salt", "Tocopherols (Vitamin E)"] },
+    { product: { name: "Nature's Path Organic Heritage Flakes", brand: "Nature's Path", size: "13.25 oz", store: "Whole Foods", priceUsd: 5.49 }, health: { score: 91, flags: [], summary: "Whole grain, organic, low sugar, no additives." }, prediction: { direction: "flat", percentChange: 0.1, confidence: 90, recommendation: "Very stable price." }, ingredients: ["Organic Whole Wheat", "Organic Barley", "Organic Spelt", "Organic Oats", "Sea Salt"] },
+    { product: { name: "O Organics Honey O's", brand: "O Organics", size: "14 oz", store: "Safeway", priceUsd: 3.79 }, health: { score: 73, flags: ["added sugar"], summary: "Organic base but added honey sweetener." }, prediction: { direction: "flat", percentChange: 0.6, confidence: 82, recommendation: "Stable pricing." }, ingredients: ["Organic Oat Flour", "Organic Honey", "Organic Cane Sugar", "Sea Salt", "Natural Flavor"] },
+    { product: { name: "Malt-O-Meal Fruity Dyno-Bites", brand: "Malt-O-Meal", size: "32 oz", store: "Kroger", priceUsd: 3.99 }, health: { score: 38, flags: ["high sugar", "artificial colors", "BHT preservative"], summary: "High sugar cereal with artificial additives." }, prediction: { direction: "flat", percentChange: 0.4, confidence: 88, recommendation: "Stable pricing, buy anytime." }, ingredients: ["Corn Flour", "Sugar", "Partially Hydrogenated Vegetable Oil", "Red 40", "Yellow 6", "Blue 1", "BHT Preservative", "Natural and Artificial Flavors"] },
+    { product: { name: "Market Pantry Toasted Oats", brand: "Market Pantry", size: "14 oz", store: "Target", priceUsd: 2.99 }, health: { score: 71, flags: ["added sugar"], summary: "Basic cereal, low additive count." }, prediction: { direction: "flat", percentChange: 0.2, confidence: 85, recommendation: "Very stable." }, ingredients: ["Whole Grain Oat Flour", "Sugar", "Oat Bran", "Modified Corn Starch", "Salt", "Vitamin E"] },
+  ],
+  yogurt: [
+    { product: { name: "Greek Yogurt", brand: "Trader Joe's", size: "32 oz", store: "Trader Joe's", priceUsd: 4.99 }, health: { score: 80, flags: ["natural flavors"], summary: "Good protein, minimal additives." }, prediction: { direction: "rising", percentChange: 1.4, confidence: 61, recommendation: "Mild increase, fine to buy now." }, ingredients: ["Cultured Pasteurized Nonfat Milk", "Live Active Cultures (S. Thermophilus, L. Bulgaricus)", "Natural Flavors"] },
+    { product: { name: "Stonyfield Organic Greek Yogurt", brand: "Stonyfield", size: "32 oz", store: "Whole Foods", priceUsd: 6.29 }, health: { score: 88, flags: ["added sugar"], summary: "Organic with live cultures, minimal sugar added." }, prediction: { direction: "rising", percentChange: 2.1, confidence: 55, recommendation: "Slight increase likely, buy soon." }, ingredients: ["Organic Pasteurized Milk", "Organic Cane Sugar", "Live Active Cultures", "Pectin"] },
+    { product: { name: "Signature Select Greek Yogurt", brand: "Signature Select", size: "32 oz", store: "Safeway", priceUsd: 4.49 }, health: { score: 72, flags: ["added sugar", "natural flavors"], summary: "Standard yogurt with moderate additives." }, prediction: { direction: "flat", percentChange: 0.7, confidence: 74, recommendation: "Stable." }, ingredients: ["Cultured Grade A Milk", "Sugar", "Corn Starch", "Natural Flavors", "Potassium Sorbate"] },
+    { product: { name: "Great Value Greek Yogurt", brand: "Great Value", size: "32 oz", store: "Kroger", priceUsd: 4.28 }, health: { score: 68, flags: ["added sugar", "natural flavors"], summary: "Good protein but has added sweeteners." }, prediction: { direction: "rising", percentChange: 1.8, confidence: 59, recommendation: "Mild upward trend, OK to buy now." }, ingredients: ["Cultured Grade A Milk", "Sugar", "Modified Food Starch", "Natural Flavors", "Potassium Sorbate"] },
+    { product: { name: "Good & Gather Greek Yogurt", brand: "Good & Gather", size: "32 oz", store: "Target", priceUsd: 4.59 }, health: { score: 76, flags: ["natural flavors"], summary: "Decent quality, minimal additives." }, prediction: { direction: "flat", percentChange: 0.5, confidence: 71, recommendation: "Stable pricing." }, ingredients: ["Cultured Pasteurized Nonfat Milk", "Live Active Cultures", "Natural Flavors"] },
+  ],
+  bread: [
+    { product: { name: "Whole Wheat Bread", brand: "Trader Joe's", size: "24 oz", store: "Trader Joe's", priceUsd: 3.49 }, health: { score: 79, flags: [], summary: "Whole wheat, no HFCS, short ingredient list." }, prediction: { direction: "flat", percentChange: 0.2, confidence: 89, recommendation: "Very stable." }, ingredients: ["Whole Wheat Flour", "Water", "Honey", "Yeast", "Sea Salt"] },
+    { product: { name: "Dave's Killer Bread 21 Whole Grains", brand: "Dave's Killer Bread", size: "27 oz", store: "Whole Foods", priceUsd: 5.99 }, health: { score: 86, flags: [], summary: "Organic whole grains, high fiber, no HFCS." }, prediction: { direction: "flat", percentChange: 0.5, confidence: 83, recommendation: "Stable pricing." }, ingredients: ["Organic Whole Wheat", "Water", "Organic Cane Sugar", "Organic Seeds (Flax, Sunflower, Sesame)", "Organic Oats", "Yeast", "Sea Salt"] },
+    { product: { name: "Oroweat Whole Wheat", brand: "Oroweat", size: "24 oz", store: "Safeway", priceUsd: 4.29 }, health: { score: 74, flags: ["dough conditioners"], summary: "Whole wheat with some processing aids." }, prediction: { direction: "flat", percentChange: 0.3, confidence: 86, recommendation: "Stable." }, ingredients: ["Whole Wheat Flour", "Water", "Sugar", "Yeast", "Soybean Oil", "Salt", "DATEM", "Calcium Sulfate"] },
+    { product: { name: "L'Oven Fresh White Bread", brand: "L'Oven Fresh", size: "20 oz", store: "Kroger", priceUsd: 1.89 }, health: { score: 45, flags: ["high fructose corn syrup", "dough conditioners"], summary: "Budget bread with processed ingredients." }, prediction: { direction: "flat", percentChange: 0.2, confidence: 91, recommendation: "Price is stable." }, ingredients: ["Enriched Wheat Flour (Niacin, Iron, Thiamine)", "Water", "High Fructose Corn Syrup", "Yeast", "Soybean Oil", "Sodium Stearoyl Lactylate", "DATEM", "Calcium Peroxide"] },
+    { product: { name: "Good & Gather Wheat Bread", brand: "Good & Gather", size: "20 oz", store: "Target", priceUsd: 3.29 }, health: { score: 73, flags: [], summary: "Simple wheat bread, short ingredient list." }, prediction: { direction: "flat", percentChange: 0.4, confidence: 80, recommendation: "Stable." }, ingredients: ["Whole Wheat Flour", "Water", "Sugar", "Yeast", "Canola Oil", "Salt"] },
+  ],
+  chicken: [
+    { product: { name: "All Natural Chicken Breast", brand: "Trader Joe's", size: "2.5 lb", store: "Trader Joe's", priceUsd: 11.91 }, health: { score: 81, flags: ["water added"], summary: "No antibiotics, minimal processing. Some water retained." }, prediction: { direction: "rising", percentChange: 4.2, confidence: 75, recommendation: "Poultry trending up, buy now." }, ingredients: ["Chicken Breast", "Water (retained from processing, up to 4%)"] },
+    { product: { name: "Bell & Evans Air Chilled Chicken Breast", brand: "Bell & Evans", size: "2 lb", store: "Whole Foods", priceUsd: 10.62 }, health: { score: 93, flags: [], summary: "Air chilled, no antibiotics, no added solutions." }, prediction: { direction: "rising", percentChange: 3.9, confidence: 72, recommendation: "Organic poultry rising, buy now." }, ingredients: ["Chicken Breast"] },
+    { product: { name: "Open Nature Chicken Breast", brand: "Open Nature", size: "2.5 lb", store: "Safeway", priceUsd: 10.99 }, health: { score: 77, flags: ["water added"], summary: "Antibiotic-free but water-added." }, prediction: { direction: "rising", percentChange: 3.5, confidence: 70, recommendation: "Poultry prices climbing." }, ingredients: ["Chicken Breast", "Water (up to 8%)", "Sea Salt"] },
+    { product: { name: "Kroger Boneless Chicken Breast", brand: "Kroger", size: "3 lb", store: "Kroger", priceUsd: 10.49 }, health: { score: 65, flags: ["water added", "sodium solution"], summary: "Conventional chicken with added sodium solution." }, prediction: { direction: "rising", percentChange: 5.7, confidence: 77, recommendation: "Buy now, poultry prices rising sharply." }, ingredients: ["Chicken Breast", "Water", "Sodium Phosphate", "Salt", "Carrageenan"] },
+    { product: { name: "Good & Gather Chicken Breast", brand: "Good & Gather", size: "2.5 lb", store: "Target", priceUsd: 11.49 }, health: { score: 78, flags: [], summary: "No antibiotics ever, minimally processed." }, prediction: { direction: "rising", percentChange: 3.8, confidence: 73, recommendation: "Poultry prices rising, buy soon." }, ingredients: ["Chicken Breast", "Water (up to 4%)"] },
+  ],
+};
+
+// ─── SORTING ───
+
+function getSortedAlts(itemQuery) {
+  var alts = allItemAlternatives[itemQuery].slice();
+  var maxP = Math.max.apply(null, alts.map(function(a) { return a.product.priceUsd; }));
+  var score = function(a) { return (1 - a.product.priceUsd / maxP) * 0.4 + (a.health.score / 100) * 0.6; };
+  alts.sort(function(a, b) { return score(b) - score(a); });
+  return alts;
+}
+
+// ─── HELPERS ───
+
+function formatUsd(v) { return "$" + v.toFixed(2); }
+
+function healthColor(s) {
+  if (s >= 80) return { text: "#059669", bg: "#ECFDF5", label: "Clean" };
+  if (s >= 60) return { text: "#D97706", bg: "#FFF7ED", label: "Okay" };
+  return { text: "#DC2626", bg: "#FEF2F2", label: "Watch" };
+}
+
+function trendInfo(d, pct) {
+  if (d === "rising") return { sym: "\u2191", color: "#DC2626", label: "rising" };
+  if (d === "falling") return { sym: "\u2193", color: "#059669", label: "falling" };
+  return { sym: "\u2192", color: "#64748B", label: "flat" };
+}
+
+function esc(s) {
+  var d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function el(tag, cls, html) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+
+function isIngredientFlagged(ingredient) {
+  var lower = ingredient.toLowerCase();
+  for (var i = 0; i < FLAGGED_INGREDIENTS.length; i++) {
+    if (lower.indexOf(FLAGGED_INGREDIENTS[i].toLowerCase()) !== -1) return true;
+  }
+  return false;
+}
+
+// ─── STATE ───
+
+var state = {
+  view: "overview",
+  selectedItemQuery: null,
+  activeStoreId: null,
+  customPicks: {},
+};
+
+var leafletMap = null;
+var markers = {};
+
+// ─── PLAN CALCULATION ───
+
+function getSelectedAlt(itemQuery) {
+  var customId = state.customPicks[itemQuery];
+  var alts = getSortedAlts(itemQuery);
+  if (customId) {
+    for (var i = 0; i < alts.length; i++) {
+      if ((alts[i].product.store + ":" + alts[i].product.name) === customId) return alts[i];
+    }
+  }
+  return alts[0];
+}
+
+function buildPlan() {
+  var storeMap = {};
+  var totalUsd = 0;
+  var allPicks = [];
+
+  for (var i = 0; i < DEMO_ITEMS.length; i++) {
+    var q = DEMO_ITEMS[i];
+    var pick = getSelectedAlt(q);
+    allPicks.push({ query: q, alt: pick });
+    var s = pick.product.store;
+    if (!storeMap[s]) storeMap[s] = { items: [], subtotal: 0 };
+    storeMap[s].items.push(q);
+    storeMap[s].subtotal += pick.product.priceUsd;
+    totalUsd += pick.product.priceUsd;
+  }
+
+  var storeBreakdown = [];
+  for (var store in storeMap) {
+    storeBreakdown.push({
+      store: store,
+      items: storeMap[store].items,
+      subtotalUsd: Math.round(storeMap[store].subtotal * 100) / 100
+    });
+  }
+
+  // Calculate average trend
+  var sumChange = 0;
+  for (var k = 0; k < allPicks.length; k++) {
+    var sign = allPicks[k].alt.prediction.direction === "falling" ? -1 : 1;
+    sumChange += allPicks[k].alt.prediction.percentChange * sign;
+  }
+  var avgChange = sumChange / allPicks.length;
+
+  // Calculate savings vs buying all at Whole Foods
+  var wholeFoodsTotal = 0;
+  for (var wi = 0; wi < DEMO_ITEMS.length; wi++) {
+    var alts = allItemAlternatives[DEMO_ITEMS[wi]];
+    for (var wj = 0; wj < alts.length; wj++) {
+      if (alts[wj].product.store === "Whole Foods") {
+        wholeFoodsTotal += alts[wj].product.priceUsd;
+        break;
+      }
+    }
+  }
+  var savings = wholeFoodsTotal - totalUsd;
+
+  return {
+    picks: allPicks,
+    storeBreakdown: storeBreakdown,
+    totalUsd: Math.round(totalUsd * 100) / 100,
+    avgTrendChange: Math.round(Math.abs(avgChange) * 10) / 10,
+    avgTrendDirection: avgChange > 0.5 ? "rising" : avgChange < -0.5 ? "falling" : "flat",
+    savings: Math.round(savings * 100) / 100,
+  };
+}
+
+// ─── RENDER ───
+
+function render() {
+  var root = document.getElementById("widget-root");
+  root.innerHTML = "";
+  root.style.height = "640px";
+  root.style.display = "flex";
+  root.style.flexDirection = "column";
+  root.style.background = "#F8FAFC";
+  root.style.fontFamily = "'Inter', sans-serif";
+  root.style.borderRadius = "12px";
+  root.style.overflow = "hidden";
+
+  // Header
+  var header = document.createElement("div");
+  header.style.cssText = "padding:16px 24px;border-bottom:1px solid #E2E8F0;background:#fff;flex-shrink:0;";
+  header.innerHTML = '<h1 style="font-size:28px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;margin:0;">CartQuant</h1>';
+  root.appendChild(header);
+
+  // Body: two columns
+  var body = document.createElement("div");
+  body.style.cssText = "flex:1;display:flex;overflow:hidden;min-height:0;";
+
+  // Left column
+  var leftCol = document.createElement("div");
+  leftCol.style.cssText = "width:50%;overflow-y:auto;padding:16px;border-right:1px solid #E2E8F0;";
+  leftCol.className = "overflow-y-auto";
+  leftCol.id = "left-col";
+
+  // Right column (map)
+  var rightCol = document.createElement("div");
+  rightCol.style.cssText = "width:50%;padding:16px;display:flex;flex-direction:column;";
+  rightCol.id = "right-col";
+
+  body.appendChild(leftCol);
+  body.appendChild(rightCol);
+  root.appendChild(body);
+
+  if (state.view === "overview") {
+    renderOverview(leftCol);
+  } else {
+    renderDetail(leftCol);
+  }
+
+  renderMap(rightCol);
+}
+
+function renderOverview(container) {
+  var plan = buildPlan();
+  var trend = trendInfo(plan.avgTrendDirection, plan.avgTrendChange);
+
+  // Basket Plan Hero Card
+  var hero = document.createElement("div");
+  hero.className = "fade-slide-in";
+  hero.style.cssText = "background:#fff;border-radius:16px;padding:20px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);";
+
+  var heroTop = document.createElement("div");
+  heroTop.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;";
+
+  var heroLeft = document.createElement("div");
+  heroLeft.innerHTML = '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#4F46E5;margin-bottom:6px;">Recommended Basket Plan</div>';
+
+  // Summary text
+  var parts = [];
+  for (var pi = 0; pi < plan.storeBreakdown.length; pi++) {
+    var sb = plan.storeBreakdown[pi];
+    parts.push(esc(sb.store) + " for " + sb.items.length + " item" + (sb.items.length > 1 ? "s" : ""));
+  }
+  var summaryText = plan.storeBreakdown.length === 1
+    ? "All items from " + esc(plan.storeBreakdown[0].store)
+    : parts.join(", ");
+  heroLeft.innerHTML += '<p style="font-size:14px;color:#0F172A;margin:0;line-height:1.5;">' + summaryText + '</p>';
+
+  var heroRight = document.createElement("div");
+  heroRight.style.cssText = "text-align:right;flex-shrink:0;";
+  heroRight.innerHTML = '<div style="font-size:24px;font-weight:700;color:#0F172A;">' + formatUsd(plan.totalUsd) + '</div>' +
+    '<div style="font-size:12px;font-weight:600;color:' + trend.color + ';">' + trend.sym + ' ' + plan.avgTrendChange + '% 7d</div>';
+
+  heroTop.appendChild(heroLeft);
+  heroTop.appendChild(heroRight);
+  hero.appendChild(heroTop);
+
+  // Divider
+  var divider = document.createElement("div");
+  divider.style.cssText = "height:1px;background:#E2E8F0;margin:14px 0;";
+  hero.appendChild(divider);
+
+  // Store breakdown rows
+  for (var si = 0; si < plan.storeBreakdown.length; si++) {
+    var sb = plan.storeBreakdown[si];
+    var row = document.createElement("div");
+    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:4px 0;";
+    row.innerHTML = '<div><span style="font-size:13px;font-weight:600;color:#0F172A;">' + esc(sb.store) + '</span> ' +
+      '<span style="font-size:12px;color:#94A3B8;">' + esc(sb.items.join(", ")) + '</span></div>' +
+      '<span style="font-size:13px;font-weight:600;color:#0F172A;">' + formatUsd(sb.subtotalUsd) + '</span>';
+    hero.appendChild(row);
+  }
+
+  // Savings line
+  if (plan.savings > 0) {
+    var savingsDiv = document.createElement("div");
+    savingsDiv.style.cssText = "margin-top:12px;font-size:13px;font-weight:600;color:#059669;";
+    savingsDiv.textContent = "Save " + formatUsd(plan.savings) + " vs all-Whole Foods basket";
+    hero.appendChild(savingsDiv);
+  }
+
+  container.appendChild(hero);
+
+  // Item Cards
+  for (var i = 0; i < DEMO_ITEMS.length; i++) {
+    (function(itemQuery, idx) {
+      var pick = getSelectedAlt(itemQuery);
+      var sorted = getSortedAlts(itemQuery);
+      var isRecommended = !state.customPicks[itemQuery] || (state.customPicks[itemQuery] === (sorted[0].product.store + ":" + sorted[0].product.name));
+      var hc = healthColor(pick.health.score);
+      var ti = trendInfo(pick.prediction.direction, pick.prediction.percentChange);
+
+      var card = document.createElement("div");
+      card.className = "item-card";
+      card.style.cssText = "background:#fff;border-radius:16px;padding:16px;border:1px solid #E2E8F0;margin-bottom:12px;cursor:pointer;";
+      card.onclick = function() {
+        state.view = "detail";
+        state.selectedItemQuery = itemQuery;
+        state.activeStoreId = pick.product.store;
+        render();
+      };
+
+      // Row 1: star + store ... price
+      var row1 = document.createElement("div");
+      row1.style.cssText = "display:flex;justify-content:space-between;align-items:center;";
+
+      var leftPart = document.createElement("div");
+      leftPart.style.cssText = "display:flex;align-items:center;gap:8px;min-width:0;";
+
+      if (isRecommended) {
+        var star = document.createElement("span");
+        star.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#FFF7ED;border:1px solid #FED7AA;color:#D97706;font-size:12px;flex-shrink:0;";
+        star.innerHTML = "&#9733;";
+        leftPart.appendChild(star);
+      }
+
+      var storeName = document.createElement("span");
+      storeName.style.cssText = "font-size:15px;font-weight:600;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      storeName.textContent = pick.product.store;
+      leftPart.appendChild(storeName);
+
+      var price = document.createElement("span");
+      price.style.cssText = "font-size:16px;font-weight:700;color:#0F172A;flex-shrink:0;";
+      price.textContent = formatUsd(pick.product.priceUsd);
+
+      row1.appendChild(leftPart);
+      row1.appendChild(price);
+      card.appendChild(row1);
+
+      // Row 2: health badge + trend + product name
+      var row2 = document.createElement("div");
+      row2.style.cssText = "display:flex;align-items:center;gap:8px;margin-top:6px;";
+
+      var badge = document.createElement("span");
+      badge.style.cssText = "font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:" + hc.bg + ";color:" + hc.text + ";flex-shrink:0;";
+      badge.textContent = hc.label + " " + pick.health.score;
+
+      var trendSpan = document.createElement("span");
+      trendSpan.style.cssText = "font-size:12px;font-weight:500;color:" + ti.color + ";flex-shrink:0;";
+      trendSpan.textContent = ti.sym + pick.prediction.percentChange + "%";
+
+      var prodName = document.createElement("span");
+      prodName.style.cssText = "font-size:12px;color:#94A3B8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      prodName.textContent = pick.product.name;
+
+      row2.appendChild(badge);
+      row2.appendChild(trendSpan);
+      row2.appendChild(prodName);
+      card.appendChild(row2);
+
+      container.appendChild(card);
+    })(DEMO_ITEMS[i], i);
+  }
+
+  // Book button
+  var bookBtn = document.createElement("button");
+  bookBtn.className = "book-btn";
+  bookBtn.style.cssText = "width:100%;padding:14px 0;background:#4F46E5;color:#fff;font-size:15px;font-weight:600;border:none;border-radius:16px;cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;margin-top:4px;";
+  bookBtn.textContent = "Book This Basket";
+  bookBtn.onclick = function() {
+    bookBtn.textContent = "Booked!";
+    bookBtn.style.background = "#059669";
+    setTimeout(function() {
+      bookBtn.textContent = "Book This Basket";
+      bookBtn.style.background = "#4F46E5";
+    }, 1500);
+  };
+  container.appendChild(bookBtn);
+}
+
+function renderDetail(container) {
+  var itemQuery = state.selectedItemQuery;
+  if (!itemQuery) { state.view = "overview"; render(); return; }
+
+  var pick = getSelectedAlt(itemQuery);
+  var allAlts = getSortedAlts(itemQuery);
+  var hc = healthColor(pick.health.score);
+  var ti = trendInfo(pick.prediction.direction, pick.prediction.percentChange);
+
+  var wrapper = document.createElement("div");
+  wrapper.className = "fade-slide-in";
+
+  // Back button
+  var backBtn = document.createElement("button");
+  backBtn.style.cssText = "background:none;border:none;color:#4F46E5;font-size:14px;font-weight:500;cursor:pointer;padding:0;margin-bottom:16px;";
+  backBtn.innerHTML = "&larr; Back to basket";
+  backBtn.onclick = function() {
+    state.view = "overview";
+    state.selectedItemQuery = null;
+    state.activeStoreId = null;
+    render();
+  };
+  wrapper.appendChild(backBtn);
+
+  // Product Detail Card
+  var detailCard = document.createElement("div");
+  detailCard.style.cssText = "background:#fff;border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);margin-bottom:16px;";
+
+  // Top row: info left, score right
+  var topRow = document.createElement("div");
+  topRow.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;";
+
+  // Left side
+  var infoLeft = document.createElement("div");
+  infoLeft.style.cssText = "flex:1;min-width:0;";
+  infoLeft.innerHTML = '<div style="font-size:18px;font-weight:700;color:#0F172A;margin-bottom:4px;">' + esc(pick.product.name) + '</div>' +
+    '<div style="font-size:14px;color:#64748B;margin-bottom:8px;">' + esc(pick.product.store) + ' &middot; ' + esc(pick.product.size) + '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<span style="font-size:20px;font-weight:700;color:#0F172A;">' + formatUsd(pick.product.priceUsd) + '</span>' +
+      '<span style="font-size:13px;font-weight:600;color:' + ti.color + ';">' + ti.sym + ' ' + pick.prediction.percentChange + '%</span>' +
+    '</div>';
+
+  // Right side: circular score
+  var scoreRight = document.createElement("div");
+  scoreRight.style.cssText = "flex-shrink:0;margin-left:16px;";
+
+  var circleSize = 80;
+  var radius = 32;
+  var circumference = 2 * Math.PI * radius;
+  var progress = (pick.health.score / 100) * circumference;
+  var dashoffset = circumference - progress;
+
+  var scoreSvg = '<svg width="' + circleSize + '" height="' + circleSize + '" viewBox="0 0 ' + circleSize + ' ' + circleSize + '" style="transform:rotate(-90deg)">' +
+    '<circle cx="40" cy="40" r="' + radius + '" fill="' + hc.bg + '" />' +
+    '<circle cx="40" cy="40" r="' + radius + '" fill="none" stroke="#E2E8F0" stroke-width="6" />' +
+    '<circle cx="40" cy="40" r="' + radius + '" fill="none" stroke="' + hc.text + '" stroke-width="6" stroke-linecap="round" stroke-dasharray="' + circumference + '" stroke-dashoffset="' + dashoffset + '" style="transition:stroke-dashoffset 0.6s ease" />' +
+    '</svg>';
+
+  scoreRight.innerHTML = '<div style="position:relative;width:' + circleSize + 'px;height:' + circleSize + 'px;">' +
+    scoreSvg +
+    '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:rotate(0deg);">' +
+      '<span style="font-size:20px;font-weight:700;color:' + hc.text + ';">' + pick.health.score + '</span>' +
+    '</div></div>';
+
+  topRow.appendChild(infoLeft);
+  topRow.appendChild(scoreRight);
+  detailCard.appendChild(topRow);
+
+  // Ingredients section
+  var ingredientsSection = document.createElement("div");
+  ingredientsSection.style.cssText = "padding-top:16px;border-top:1px solid #E2E8F0;margin-top:16px;";
+  ingredientsSection.innerHTML = '<div style="font-size:12px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:8px;">Ingredients</div>';
+
+  var ingredients = pick.ingredients || [];
+  var ingList = document.createElement("ul");
+  ingList.style.cssText = "margin:0;padding-left:18px;list-style:disc;";
+  for (var ii = 0; ii < ingredients.length; ii++) {
+    var li = document.createElement("li");
+    li.style.cssText = "font-size:13px;color:#334155;line-height:1.6;";
+    if (isIngredientFlagged(ingredients[ii])) {
+      li.innerHTML = '<span style="color:#D97706;font-weight:500;">' + esc(ingredients[ii]) + '</span>';
+    } else {
+      li.textContent = ingredients[ii];
+    }
+    ingList.appendChild(li);
+  }
+  ingredientsSection.appendChild(ingList);
+
+  // Health summary
+  if (pick.health.summary) {
+    var healthSum = document.createElement("p");
+    healthSum.style.cssText = "font-size:14px;color:#334155;font-style:italic;margin-top:10px;margin-bottom:0;line-height:1.5;";
+    healthSum.textContent = pick.health.summary;
+    ingredientsSection.appendChild(healthSum);
+  }
+
+  detailCard.appendChild(ingredientsSection);
+  wrapper.appendChild(detailCard);
+
+  // Alternatives Section
+  var altsHeading = document.createElement("div");
+  altsHeading.style.cssText = "font-size:14px;font-weight:600;color:#0F172A;margin-bottom:12px;";
+  altsHeading.textContent = "Alternatives";
+  wrapper.appendChild(altsHeading);
+
+  var currentId = pick.product.store + ":" + pick.product.name;
+  for (var ai = 0; ai < allAlts.length; ai++) {
+    (function(alt) {
+      var altId = alt.product.store + ":" + alt.product.name;
+      if (altId === currentId) return;
+
+      var ahc = healthColor(alt.health.score);
+      var ati = trendInfo(alt.prediction.direction, alt.prediction.percentChange);
+
+      var altCard = document.createElement("div");
+      altCard.style.cssText = "background:#fff;border-radius:16px;padding:14px 16px;border:1px solid #E2E8F0;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);";
+
+      var altLeft = document.createElement("div");
+      altLeft.style.cssText = "flex:1;min-width:0;";
+
+      // Row: store name + price
+      altLeft.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+        '<span style="font-size:13px;font-weight:600;color:#0F172A;">' + esc(alt.product.store) + '</span>' +
+        '</div>' +
+        '<div style="font-size:13px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;">' + esc(alt.product.name) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;">' +
+          '<span style="font-size:14px;font-weight:700;color:#0F172A;">' + formatUsd(alt.product.priceUsd) + '</span>' +
+          '<span style="font-size:12px;font-weight:600;padding:2px 6px;border-radius:999px;background:' + ahc.bg + ';color:' + ahc.text + ';">' + ahc.label + ' ' + alt.health.score + '</span>' +
+          '<span style="font-size:12px;font-weight:500;color:' + ati.color + ';">' + ati.sym + alt.prediction.percentChange + '%</span>' +
+        '</div>';
+
+      var swapBtn = document.createElement("button");
+      swapBtn.className = "swap-btn";
+      swapBtn.style.cssText = "background:#4F46E5;color:#fff;font-size:12px;font-weight:600;padding:6px 16px;border:none;border-radius:10px;cursor:pointer;flex-shrink:0;margin-left:12px;transition:transform 0.15s ease, opacity 0.15s ease;";
+      swapBtn.textContent = "Swap";
+      swapBtn.onclick = function(e) {
+        e.stopPropagation();
+        state.customPicks[itemQuery] = altId;
+        state.view = "overview";
+        state.selectedItemQuery = null;
+        state.activeStoreId = null;
+        render();
+      };
+
+      altCard.appendChild(altLeft);
+      altCard.appendChild(swapBtn);
+      wrapper.appendChild(altCard);
+    })(allAlts[ai]);
+  }
+
+  container.appendChild(wrapper);
+}
+
+// ─── MAP ───
+
+function makeIcon(color, size, badge) {
+  var badgeSvg = badge != null
+    ? '<circle cx="' + (size - 6) + '" cy="5" r="6" fill="#4F46E5" stroke="#fff" stroke-width="1"/><text x="' + (size - 6) + '" y="8" text-anchor="middle" font-size="8" font-weight="bold" fill="#fff">' + badge + '</text>'
+    : '';
+  return L.divIcon({
+    className: '',
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+    html: '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<g transform="scale(' + (size / 24) + ')">' +
+      '<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="' + color + '" stroke="#fff" stroke-width="1.5"/>' +
+      '<circle cx="12" cy="9" r="2.5" fill="#fff"/></g>' + badgeSvg + '</svg>',
+  });
+}
+
+function renderMap(container) {
+  var mapOuter = document.createElement("div");
+  mapOuter.style.cssText = "flex:1;border-radius:16px;overflow:hidden;border:1px solid #E2E8F0;min-height:200px;";
+  var mapDiv = document.createElement("div");
+  mapDiv.id = "leaflet-map";
+  mapDiv.style.cssText = "width:100%;height:100%;";
+  mapOuter.appendChild(mapDiv);
+  container.appendChild(mapOuter);
+
+  setTimeout(function() { initMap(); }, 80);
+}
+
+function initMap() {
+  var container = document.getElementById("leaflet-map");
+  if (!container || !window.L) return;
+
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; markers = {}; }
+
+  leafletMap = L.map(container, {
+    center: [37.7749, -122.4194],
+    zoom: 13,
+    zoomControl: true,
+    attributionControl: false,
+  });
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd",
+    maxZoom: 19,
+  }).addTo(leafletMap);
+
+  var plan = buildPlan();
+  var assignedStores = {};
+  for (var pi = 0; pi < plan.storeBreakdown.length; pi++) {
+    assignedStores[plan.storeBreakdown[pi].store] = plan.storeBreakdown[pi];
+  }
+
+  for (var si = 0; si < STORES.length; si++) {
+    (function(store) {
+      var isActive = store.name === state.activeStoreId;
+      var isInPlan = !!assignedStores[store.name];
+      var assigned = assignedStores[store.name];
+      var color = isActive ? "#4F46E5" : isInPlan ? "#2563EB" : "#94A3B8";
+      var size = isActive ? 36 : 28;
+      var badge = isInPlan && assigned ? assigned.items.length : undefined;
+
+      var marker = L.marker([store.lat, store.lng], {
+        icon: makeIcon(color, size, badge),
+        title: store.name,
+      }).addTo(leafletMap);
+
+      var tooltipContent = isInPlan && assigned
+        ? "<b>" + esc(store.name) + "</b><br/>" + assigned.items.length + " item" + (assigned.items.length > 1 ? "s" : "") + " &middot; " + formatUsd(assigned.subtotalUsd)
+        : esc(store.name);
+      marker.bindTooltip(tooltipContent, { direction: "top", offset: [0, -24] });
+
+      marker.on("click", function() {
+        state.activeStoreId = state.activeStoreId === store.name ? null : store.name;
+        render();
+      });
+
+      if (isActive) marker.setZIndexOffset(1000);
+      markers[store.name] = marker;
+    })(STORES[si]);
+  }
+
+  // Pan to active store or detail store
+  var panTarget = state.activeStoreId;
+  if (panTarget) {
+    for (var ai = 0; ai < STORES.length; ai++) {
+      if (STORES[ai].name === panTarget) {
+        leafletMap.panTo([STORES[ai].lat, STORES[ai].lng], { animate: true, duration: 0.4 });
+        break;
+      }
+    }
+  }
+
+  setTimeout(function() { if (leafletMap) leafletMap.invalidateSize(); }, 150);
+}
+
+// ─── INIT ───
+render();
+</script>
+</body>
+</html>

@@ -87,6 +87,7 @@ export const itemAlternativeSchema = z.object({
   product: selectedProductSchema,
   health: healthInfoSchema,
   prediction: predictionInfoSchema,
+  ingredients: z.array(z.string()).default([]),
 });
 export type ItemAlternative = z.infer<typeof itemAlternativeSchema>;
 

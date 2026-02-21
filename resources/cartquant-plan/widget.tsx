@@ -1,11 +1,10 @@
 import "./widget.css";
 import { McpUseProvider, useWidget, type WidgetMetadata } from "mcp-use/react";
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   compareBasketWidgetPropsSchema,
   type CompareBasketResponse,
   type CompareBasketWidgetProps,
-  type Mode,
   type ItemAlternative,
   type BasketItemWithAlts,
   type BasketPlan,
@@ -36,19 +35,18 @@ function formatUsd(value: number): string {
   }).format(value);
 }
 
-function healthLabel(score: number): { text: string; bg: string; fg: string } {
-  if (score >= 80) return { text: "Clean", bg: "bg-emerald-100", fg: "text-emerald-800" };
-  if (score >= 60) return { text: "Okay", bg: "bg-amber-100", fg: "text-amber-800" };
-  return { text: "Watch", bg: "bg-red-100", fg: "text-red-800" };
+function healthColor(score: number): { bg: string; fg: string; text: string } {
+  if (score >= 80) return { bg: "#ECFDF5", fg: "#059669", text: "Clean" };
+  if (score >= 60) return { bg: "#FFF7ED", fg: "#D97706", text: "Okay" };
+  return { bg: "#FEF2F2", fg: "#DC2626", text: "Watch" };
 }
 
-function trendArrow(dir: TrendDirection): { symbol: string; color: string } {
-  if (dir === "rising") return { symbol: "\u2191", color: "text-red-600" };
-  if (dir === "falling") return { symbol: "\u2193", color: "text-green-600" };
-  return { symbol: "\u2192", color: "text-gray-500" };
+function trendInfo(dir: TrendDirection): { symbol: string; color: string } {
+  if (dir === "rising") return { symbol: "\u2191", color: "#DC2626" };
+  if (dir === "falling") return { symbol: "\u2193", color: "#059669" };
+  return { symbol: "\u2192", color: "#64748B" };
 }
 
-/** Deterministic alt ID: "store:productName" */
 function altId(alt: ItemAlternative): string {
   return alt.product.store + ":" + alt.product.name;
 }
@@ -56,128 +54,36 @@ function altId(alt: ItemAlternative): string {
 // ─── State ───
 
 interface WidgetState {
-  items: string[];
-  avoid: string[];
-  mode: Mode;
+  view: "overview" | "detail";
   selectedItemQuery: string | null;
-  selectedAltId: string | null;
-  activeStoreId: string | null;
-  searchQuery: string;
   results: CompareBasketResponse | null;
   loading: boolean;
   error: string | null;
-  minimizeStops: boolean;
+  activeStoreId: string | null;
+  customPicks: Record<string, string>; // itemQuery -> altId
 }
 
-type CompareBasketToolInput = {
-  items?: string[];
-  avoid?: string[];
-  mode?: Mode;
-};
+// ─── Basket Plan Computation (respects customPicks) ───
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-}
-
-function getModeValue(value: unknown): Mode {
-  return value === "cheapest" || value === "cleanest" || value === "balanced"
-    ? value
-    : "balanced";
-}
-
-function normalizeToolInput(value: unknown): Required<CompareBasketToolInput> {
-  if (!value || typeof value !== "object") {
-    return {
-      items: [...DEMO_ITEMS],
-      avoid: [],
-      mode: "balanced",
-    };
-  }
-
-  const input = value as CompareBasketToolInput;
-  const items = toStringArray(input.items);
-  return {
-    items: items.length > 0 ? items : [...DEMO_ITEMS],
-    avoid: toStringArray(input.avoid),
-    mode: getModeValue(input.mode),
-  };
-}
-
-function buildCacheKey(mode: Mode, items: string[], avoid: string[]): string {
-  return `${mode}::${items.join("|")}::${avoid.join("|")}`;
-}
-
-function extractCompareBasketResponse(result: unknown): CompareBasketResponse | null {
-  if (!result || typeof result !== "object") {
-    return null;
-  }
-
-  const outer = result as Record<string, unknown>;
-  const structured = outer.structuredContent;
-  if (!structured || typeof structured !== "object") {
-    return null;
-  }
-
-  const response = (structured as Record<string, unknown>).response;
-  if (!response || typeof response !== "object") {
-    return null;
-  }
-
-  const typedResponse = response as CompareBasketResponse;
-  if (!Array.isArray(typedResponse.items) || !typedResponse.plan) {
-    return null;
-  }
-
-  return typedResponse;
-}
-
-function buildMockFallbackForItems(mode: Mode, items: string[]): CompareBasketResponse {
-  const base = getMockBasketResponse(mode);
-  if (items.length === 0) {
-    return base;
-  }
-
-  const byQuery = new Map(base.items.map((entry) => [entry.query.toLowerCase(), entry]));
-  const picked = items
-    .map((query) => byQuery.get(query.toLowerCase()))
-    .filter((entry): entry is BasketItemWithAlts => Boolean(entry))
-    .map((entry) => ({
-      query: entry.query,
-      alternatives: [...entry.alternatives],
-    }));
-
-  if (picked.length === 0) {
-    return base;
-  }
-
-  return {
-    ...base,
-    items: picked,
-  };
-}
-
-// ─── Basket Plan Computation ───
-
-function computePlanBestPerItem(
+function computePlan(
   items: BasketItemWithAlts[],
-  mode: Mode
+  customPicks: Record<string, string>
 ): BasketPlan {
   const storeMap = new Map<string, { items: string[]; subtotal: number }>();
+  const pickedAlts: ItemAlternative[] = [];
 
   for (const item of items) {
-    const best = item.alternatives[0]; // already sorted by mode
-    if (!best?.product) continue;
-    const store = best.product.store;
+    const pickId = customPicks[item.query];
+    const picked = pickId
+      ? item.alternatives.find((a) => altId(a) === pickId) ?? item.alternatives[0]
+      : item.alternatives[0];
+    if (!picked?.product) continue;
+
+    pickedAlts.push(picked);
+    const store = picked.product.store;
     const entry = storeMap.get(store) ?? { items: [], subtotal: 0 };
     entry.items.push(item.query);
-    entry.subtotal += best.product.priceUsd;
+    entry.subtotal += picked.product.priceUsd;
     storeMap.set(store, entry);
   }
 
@@ -190,18 +96,18 @@ function computePlanBestPerItem(
   );
 
   const totalUsd = storeBreakdown.reduce((s, b) => s + b.subtotalUsd, 0);
-  const allBest = items.map((i) => i.alternatives[0]).filter(Boolean);
+
   const avgChange =
-    allBest.length > 0
-      ? allBest.reduce((sum, alt) => {
+    pickedAlts.length > 0
+      ? pickedAlts.reduce((sum, alt) => {
           if (!alt?.prediction) return sum;
           const sign = alt.prediction.direction === "falling" ? -1 : 1;
           return sum + alt.prediction.percentChange * sign;
-        }, 0) / allBest.length
+        }, 0) / pickedAlts.length
       : 0;
   const avgConf =
-    allBest.length > 0
-      ? allBest.reduce((s, a) => s + (a?.prediction?.confidence ?? 0), 0) / allBest.length
+    pickedAlts.length > 0
+      ? pickedAlts.reduce((s, a) => s + (a?.prediction?.confidence ?? 0), 0) / pickedAlts.length
       : 0;
 
   const parts = storeBreakdown.map(
@@ -211,450 +117,126 @@ function computePlanBestPerItem(
   return {
     summary:
       storeBreakdown.length === 1
-        ? `Best plan: all items from ${storeBreakdown[0].store}`
-        : `Best plan: ${parts.join(", ")}`,
+        ? `All items from ${storeBreakdown[0].store}`
+        : parts.join(", "),
     totalUsd: Math.round(totalUsd * 100) / 100,
     totalPrediction: {
       direction: avgChange > 1 ? "rising" : avgChange < -1 ? "falling" : "flat",
       percentChange: Math.round(Math.abs(avgChange) * 10) / 10,
       confidence: Math.round(avgConf),
-      recommendation:
-        mode === "cheapest"
-          ? "Buy now \u2014 prices trending up across dairy and poultry."
-          : mode === "cleanest"
-            ? "Organic prices stable. Good time to stock up."
-            : "Moderate upward pressure. This basket balances value well.",
+      recommendation: "Moderate upward pressure. This basket balances value well.",
     },
     storeBreakdown,
-    savings:
-      mode === "cheapest"
-        ? "Save $8.12 vs Whole Foods basket"
-        : mode === "cleanest"
-          ? "Pays $15.44 more than cheapest, but 0 health red flags"
-          : "Save $4.27 vs cheapest organic, $9.71 vs full Whole Foods",
+    savings: "Save $4.27 vs cheapest organic, $9.71 vs full Whole Foods",
   };
 }
 
-function computePlanMinStops(
-  items: BasketItemWithAlts[],
-  mode: Mode
-): BasketPlan {
-  const storeScores = new Map<string, number>();
-  const storePrices = new Map<string, Map<string, number>>();
+// ─── Circular Score SVG ───
 
-  for (const item of items) {
-    for (const alt of item.alternatives) {
-      if (!alt?.product || !alt?.health) continue;
-      const store = alt.product.store;
-      const price = alt.product.priceUsd;
-      const health = alt.health.score;
-      let score: number;
-      switch (mode) {
-        case "cheapest":
-          score = -price;
-          break;
-        case "cleanest":
-          score = health;
-          break;
-        default:
-          score = health * 0.6 - price * 0.4;
-      }
-      storeScores.set(store, (storeScores.get(store) ?? 0) + score);
-      if (!storePrices.has(store)) storePrices.set(store, new Map());
-      storePrices.get(store)!.set(item.query, price);
-    }
-  }
+function CircularScore({ score, size = 80 }: { score: number; size?: number }) {
+  const r = (size - 8) / 2;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference - (score / 100) * circumference;
+  const color = score >= 80 ? "#059669" : score >= 60 ? "#D97706" : "#DC2626";
+  const bgColor = score >= 80 ? "#ECFDF5" : score >= 60 ? "#FFF7ED" : "#FEF2F2";
 
-  let bestStore = "";
-  let bestScore = -Infinity;
-  for (const [store, score] of storeScores) {
-    if (score > bestScore) {
-      bestStore = store;
-      bestScore = score;
-    }
-  }
-
-  const singleTotal = items.reduce((sum, item) => {
-    const alt = item.alternatives.find((a) => a?.product?.store === bestStore);
-    return sum + (alt?.product?.priceUsd ?? item.alternatives[0]?.product?.priceUsd ?? 0);
-  }, 0);
-
-  const storeNames = Array.from(storeScores.keys());
-  let bestComboTotal = singleTotal;
-  let bestCombo: [string, string] | null = null;
-
-  for (let i = 0; i < storeNames.length; i++) {
-    for (let j = i + 1; j < storeNames.length; j++) {
-      const s1 = storeNames[i];
-      const s2 = storeNames[j];
-      let total = 0;
-      for (const item of items) {
-        const p1 = storePrices.get(s1)?.get(item.query) ?? Infinity;
-        const p2 = storePrices.get(s2)?.get(item.query) ?? Infinity;
-        total += Math.min(p1, p2);
-      }
-      if (total < bestComboTotal * 0.9) {
-        bestComboTotal = total;
-        bestCombo = [s1, s2];
-      }
-    }
-  }
-
-  const assignments = new Map<string, { items: string[]; subtotal: number }>();
-
-  if (bestCombo) {
-    const [s1, s2] = bestCombo;
-    for (const item of items) {
-      const p1 = storePrices.get(s1)?.get(item.query) ?? Infinity;
-      const p2 = storePrices.get(s2)?.get(item.query) ?? Infinity;
-      const chosen = p1 <= p2 ? s1 : s2;
-      const entry = assignments.get(chosen) ?? { items: [], subtotal: 0 };
-      entry.items.push(item.query);
-      entry.subtotal += Math.min(p1, p2);
-      assignments.set(chosen, entry);
-    }
-  } else {
-    for (const item of items) {
-      const alt = item.alternatives.find((a) => a?.product?.store === bestStore);
-      const price = alt?.product?.priceUsd ?? item.alternatives[0]?.product?.priceUsd ?? 0;
-      const entry = assignments.get(bestStore) ?? { items: [], subtotal: 0 };
-      entry.items.push(item.query);
-      entry.subtotal += price;
-      assignments.set(bestStore, entry);
-    }
-  }
-
-  const storeBreakdown: StoreAssignment[] = Array.from(assignments.entries()).map(
-    ([store, data]) => ({
-      store,
-      items: data.items,
-      subtotalUsd: Math.round(data.subtotal * 100) / 100,
-    })
-  );
-
-  const totalUsd = storeBreakdown.reduce((s, b) => s + b.subtotalUsd, 0);
-  const parts = storeBreakdown.map(
-    (s) => `${s.store} for ${s.items.length} item${s.items.length > 1 ? "s" : ""}`
-  );
-
-  return {
-    summary:
-      storeBreakdown.length === 1
-        ? `Fewest stops: all items from ${storeBreakdown[0].store}`
-        : `Fewest stops: ${parts.join(" + ")}`,
-    totalUsd: Math.round(totalUsd * 100) / 100,
-    totalPrediction: {
-      direction: "flat",
-      percentChange: 1.2,
-      confidence: 72,
-      recommendation: "Optimized for fewer store visits.",
-    },
-    storeBreakdown,
-    savings: `${storeBreakdown.length} store${storeBreakdown.length > 1 ? "s" : ""} to visit`,
-  };
-}
-
-// ─── TopBar ───
-
-function TopBar({
-  mode,
-  onModeChange,
-  minimizeStops,
-  onMinimizeStopsChange,
-}: {
-  mode: Mode;
-  onModeChange: (m: Mode) => void;
-  minimizeStops: boolean;
-  onMinimizeStopsChange: (v: boolean) => void;
-}) {
   return (
-    <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-white">
-      <div>
-        <h1 className="text-lg font-bold text-gray-900 tracking-tight">CartQuant</h1>
-      </div>
-      <div className="flex items-center gap-4">
-        <ModeToggle mode={mode} onChange={onModeChange} />
-        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={minimizeStops}
-            onChange={(e) => onMinimizeStopsChange(e.target.checked)}
-            className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          Min Stops
-        </label>
-      </div>
-    </div>
-  );
-}
-
-// ─── ModeToggle ───
-
-const MODE_LABELS: Record<Mode, string> = {
-  cheapest: "Cheapest",
-  cleanest: "Cleanest",
-  balanced: "Balanced",
-};
-
-function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
-  return (
-    <div className="flex gap-0.5 bg-gray-100 p-0.5 rounded-lg">
-      {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
-        <button
-          key={m}
-          type="button"
-          onClick={() => onChange(m)}
-          className={`text-xs font-medium py-1 px-3 rounded-md transition-colors ${
-            m === mode
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {MODE_LABELS[m]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ─── ItemTabs ───
-
-function ItemTabs({
-  items,
-  selectedItemQuery,
-  onSelect,
-}: {
-  items: string[];
-  selectedItemQuery: string | null;
-  onSelect: (tab: string) => void;
-}) {
-  return (
-    <div className="flex gap-1 px-5 py-2 border-b border-gray-200 bg-white overflow-x-auto">
-      {items.map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => onSelect(item)}
-          className={`text-sm px-3 py-1.5 capitalize whitespace-nowrap transition-colors ${
-            item === selectedItemQuery
-              ? "border-b-2 border-gray-900 text-gray-900 font-semibold"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {item}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ─── FilterInput ───
-
-function FilterInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="relative">
-      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-        &#128269;
-      </span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Filter alternatives"
-        className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill={bgColor} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="#E2E8F0"
+        strokeWidth="6"
       />
-    </div>
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth="6"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dashoffset 0.5s ease" }}
+      />
+      <text
+        x={size / 2}
+        y={size / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="20"
+        fontWeight="700"
+        fill="#0F172A"
+      >
+        {score}
+      </text>
+    </svg>
   );
 }
 
-// ─── AvoidChips ───
+// ─── Leaflet Map Panel ───
 
-function AvoidChips({
-  avoid,
-  onRemove,
-}: {
-  avoid: string[];
-  onRemove: (flag: string) => void;
-}) {
-  if (avoid.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1">
-      <span className="text-xs text-gray-500 mr-1">Avoiding:</span>
-      {avoid.map((flag) => (
-        <span
-          key={flag}
-          className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-100 text-xs px-2 py-0.5 rounded-full"
-        >
-          {flag}
-          <button
-            type="button"
-            onClick={() => onRemove(flag)}
-            className="hover:text-red-800 font-bold leading-none"
-          >
-            &times;
-          </button>
-        </span>
-      ))}
-    </div>
-  );
+const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+const SF_CENTER: [number, number] = [37.7749, -122.4194];
+const MAP_ZOOM = 13;
+
+function loadLeaflet(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).L) {
+      resolve();
+      return;
+    }
+    if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = LEAFLET_CSS;
+      document.head.appendChild(link);
+    }
+    if (document.querySelector(`script[src="${LEAFLET_JS}"]`)) {
+      const check = setInterval(() => {
+        if ((window as any).L) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 50);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = LEAFLET_JS;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Leaflet"));
+    document.head.appendChild(script);
+  });
 }
 
-// ─── AlternativeCard ───
-
-function AlternativeCard({
-  alt,
-  isSelected,
-  isRecommended,
-  onClick,
-}: {
-  alt: ItemAlternative;
-  isSelected: boolean;
-  isRecommended: boolean;
-  onClick: () => void;
-}) {
-  const score = alt.health?.score ?? 0;
-  const badge = healthLabel(score);
-  const direction = alt.prediction?.direction ?? "flat";
-  const trend = trendArrow(direction);
-  const pctChange = alt.prediction?.percentChange ?? 0;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full text-left p-3 rounded-xl border transition-all ${
-        isSelected
-          ? "border-gray-900 ring-1 ring-gray-900 shadow-md bg-white"
-          : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          {isRecommended && (
-            <span className="shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-md text-amber-700 bg-amber-50 border border-amber-200">
-              &#9733;
-            </span>
-          )}
-          <span className="text-sm font-semibold text-gray-900 truncate">
-            {alt.product?.store ?? "Unknown Store"}
-          </span>
-        </div>
-        <span className="text-sm font-bold text-gray-900 shrink-0">
-          {formatUsd(alt.product?.priceUsd ?? 0)}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 mt-1">
-        <span
-          className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}
-        >
-          {badge.text} {score}
-        </span>
-        <span className={`text-xs font-medium ${trend.color}`}>
-          {trend.symbol}{pctChange}%
-        </span>
-        <span className="text-xs text-gray-400 truncate">
-          {alt.product?.name ?? ""}
-        </span>
-      </div>
-    </button>
-  );
+function makeIcon(L: any, color: string, size: number, badge?: number): any {
+  const badgeSvg =
+    badge != null
+      ? `<circle cx="${size - 6}" cy="5" r="6" fill="#4f46e5" stroke="#fff" stroke-width="1"/>
+         <text x="${size - 6}" y="8" text-anchor="middle" font-size="8" font-weight="bold" fill="#fff">${badge}</text>`
+      : "";
+  return L.divIcon({
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+    html: `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <g transform="scale(${size / 24})">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+        <circle cx="12" cy="9" r="2.5" fill="#fff"/>
+      </g>
+      ${badgeSvg}
+    </svg>`,
+  });
 }
 
-// ─── SkeletonCardList ───
-
-function SkeletonCardList() {
-  return (
-    <div className="space-y-2">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div
-          key={i}
-          className="bg-white border border-gray-200 rounded-xl p-3 space-y-2 animate-pulse"
-        >
-          <div className="flex justify-between">
-            <div className="h-4 bg-gray-200 rounded w-1/2" />
-            <div className="h-4 bg-gray-200 rounded w-12" />
-          </div>
-          <div className="flex gap-2">
-            <div className="h-5 bg-gray-100 rounded-full w-16" />
-            <div className="h-5 bg-gray-100 rounded w-10" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── SkeletonDetail ───
-
-function SkeletonDetail() {
-  return (
-    <div className="space-y-4 animate-pulse">
-      <div className="bg-gray-100 rounded-xl p-4 space-y-2">
-        <div className="h-5 bg-gray-200 rounded w-3/4" />
-        <div className="h-4 bg-gray-200 rounded w-1/2" />
-        <div className="h-4 bg-gray-200 rounded w-1/3" />
-      </div>
-      <div className="bg-gray-100 rounded-xl p-4 space-y-2">
-        <div className="h-4 bg-gray-200 rounded w-2/3" />
-        <div className="h-3 bg-gray-200 rounded w-full" />
-        <div className="h-3 bg-gray-200 rounded w-3/4" />
-      </div>
-    </div>
-  );
-}
-
-// ─── BasketPlanHero ───
-
-function BasketPlanHero({ plan }: { plan: BasketPlan }) {
-  const direction = plan.totalPrediction?.direction ?? "flat";
-  const trend = trendArrow(direction);
-
-  return (
-    <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
-            Recommended Basket Plan
-          </div>
-          <p className="text-sm font-medium text-gray-800">{plan.summary}</p>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="text-xl font-bold text-gray-900">{formatUsd(plan.totalUsd)}</div>
-          <div className={`text-xs font-semibold ${trend.color}`}>
-            {trend.symbol}{plan.totalPrediction?.percentChange ?? 0}% 7d
-          </div>
-        </div>
-      </div>
-
-      {/* Store breakdown */}
-      <div className="space-y-1">
-        {plan.storeBreakdown.map((sb) => (
-          <div key={sb.store} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-700">{sb.store}</span>
-              <span className="text-gray-400">
-                {sb.items.map((i) => i).join(", ")}
-              </span>
-            </div>
-            <span className="font-semibold text-gray-700">{formatUsd(sb.subtotalUsd)}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="text-xs text-indigo-600 font-medium">{plan.savings}</div>
-    </div>
-  );
-}
-
-// ─── MapPlaceholder ───
-
-function MapPlaceholder({
+function MapPanel({
   storeBreakdown,
   activeStoreId,
   onStoreClick,
@@ -663,159 +245,162 @@ function MapPlaceholder({
   activeStoreId: string | null;
   onStoreClick: (storeName: string) => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
+  const onStoreClickRef = useRef(onStoreClick);
+  const [ready, setReady] = useState(false);
+
+  onStoreClickRef.current = onStoreClick;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadLeaflet().then(() => {
+      if (cancelled || !containerRef.current || mapRef.current) return;
+      const L = (window as any).L;
+      const map = L.map(containerRef.current, {
+        center: SF_CENTER,
+        zoom: MAP_ZOOM,
+        zoomControl: true,
+        attributionControl: false,
+      });
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+          subdomains: "abcd",
+          maxZoom: 19,
+        }
+      ).addTo(map);
+
+      for (const store of STORES) {
+        const marker = L.marker([store.lat, store.lng], {
+          icon: makeIcon(L, "#9ca3af", 28),
+          title: store.name,
+        }).addTo(map);
+        marker.bindTooltip(store.name, { direction: "top", offset: [0, -24] });
+        marker.on("click", () => onStoreClickRef.current(store.name));
+        markersRef.current.set(store.name, marker);
+      }
+
+      mapRef.current = map;
+      setTimeout(() => map.invalidateSize(), 100);
+      setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!ready) return;
+    const L = (window as any).L;
+    if (!L) return;
+    const assignedStores = new Set(storeBreakdown.map((s) => s.store));
+
+    for (const store of STORES) {
+      const marker = markersRef.current.get(store.name);
+      if (!marker) continue;
+      const isActive = store.name === activeStoreId;
+      const isInPlan = assignedStores.has(store.name);
+      const assigned = storeBreakdown.find((s) => s.store === store.name);
+
+      const color = isActive ? "#4f46e5" : isInPlan ? "#2563eb" : "#9ca3af";
+      const size = isActive ? 36 : 28;
+      const badge = isInPlan && assigned ? assigned.items.length : undefined;
+      marker.setIcon(makeIcon(L, color, size, badge));
+
+      const label =
+        isInPlan && assigned
+          ? `<b>${store.name}</b><br/>${assigned.items.length} item${assigned.items.length > 1 ? "s" : ""} · ${formatUsd(assigned.subtotalUsd)}`
+          : store.name;
+      marker.setTooltipContent(label);
+
+      if (isActive) marker.setZIndexOffset(1000);
+      else marker.setZIndexOffset(0);
+    }
+
+    if (activeStoreId && mapRef.current) {
+      const activeStore = STORES.find((s) => s.name === activeStoreId);
+      if (activeStore) {
+        mapRef.current.panTo([activeStore.lat, activeStore.lng], {
+          animate: true,
+          duration: 0.4,
+        });
+      }
+    }
+  }, [storeBreakdown, activeStoreId, ready]);
+
   return (
-    <div className="bg-gray-100 border border-dashed border-gray-300 rounded-xl p-4">
-      <div className="text-center mb-3">
-        <span className="text-2xl">&#128506;&#65039;</span>
-        <p className="text-xs text-gray-400 mt-1">Google Maps coming soon</p>
-      </div>
-      <div className="space-y-1.5">
-        {STORES.map((store) => {
-          const assigned = storeBreakdown.find((s) => s.store === store.name);
-          const isActive = activeStoreId === store.name;
-          return (
-            <button
-              type="button"
-              key={store.name}
-              onClick={() => onStoreClick(store.name)}
-              className={`w-full flex items-center justify-between text-xs px-2 py-1 rounded-md text-left transition-colors ${
-                isActive
-                  ? "bg-indigo-50 border border-indigo-300 ring-1 ring-indigo-300"
-                  : assigned
-                    ? "bg-white border border-gray-200 hover:border-gray-300"
-                    : "text-gray-400 hover:text-gray-500"
-              }`}
-            >
-              <span className={assigned || isActive ? "font-medium text-gray-700" : ""}>
-                {assigned ? "\u2022 " : ""}{store.name}
-              </span>
-              {assigned && (
-                <span className="text-gray-500">{assigned.items.length} items</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+    <div
+      ref={containerRef}
+      className="map-container"
+      style={{ width: "100%", height: "100%", minHeight: 200 }}
+    />
   );
 }
 
-// ─── SelectedDetail ───
+// ─── SkeletonCardList ───
 
-function SelectedDetail({
-  alt,
-  query,
-  onFlagClick,
-}: {
-  alt: ItemAlternative;
-  query: string;
-  onFlagClick: (flag: string) => void;
-}) {
-  const score = alt.health?.score ?? 0;
-  const badge = healthLabel(score);
-  const direction = alt.prediction?.direction ?? "flat";
-  const trend = trendArrow(direction);
-  const flags = alt.health?.flags ?? [];
-  const pctChange = alt.prediction?.percentChange ?? 0;
-  const confidence = alt.prediction?.confidence ?? 0;
-
+function SkeletonCardList() {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">
-            {query}
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div
+          key={i}
+          style={{
+            background: "#fff",
+            border: "1px solid #E2E8F0",
+            borderRadius: 16,
+            padding: 14,
+          }}
+          className="animate-pulse"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div style={{ height: 16, background: "#E2E8F0", borderRadius: 4, width: "50%" }} />
+            <div style={{ height: 16, background: "#E2E8F0", borderRadius: 4, width: 48 }} />
           </div>
-          <h3 className="text-base font-bold text-gray-900">{alt.product?.name ?? "Unknown"}</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {alt.product?.brand ?? ""} &middot; {alt.product?.size ?? ""} &middot;{" "}
-            <span className="font-medium text-gray-700">{alt.product?.store ?? ""}</span>
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="text-lg font-bold text-gray-900">
-            {formatUsd(alt.product?.priceUsd ?? 0)}
-          </div>
-          <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}
-          >
-            {badge.text} {score}
-          </span>
-        </div>
-      </div>
-
-      {/* Health summary */}
-      <div>
-        <div className="text-xs font-semibold text-gray-600 mb-1">Health</div>
-        <p className="text-sm text-gray-700">{alt.health?.summary ?? "No health data available."}</p>
-      </div>
-
-      {/* Flags */}
-      {flags.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold text-gray-600 mb-1">Flags</div>
-          <div className="flex flex-wrap gap-1">
-            {flags.map((flag) => (
-              <button
-                key={flag}
-                type="button"
-                onClick={() => onFlagClick(flag)}
-                title={`Add "${flag}" to avoid list`}
-                className="bg-orange-50 text-orange-700 border border-orange-200 text-xs px-2 py-0.5 rounded-full cursor-pointer hover:bg-orange-100 transition-colors"
-              >
-                {flag}
-              </button>
-            ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <div style={{ height: 20, background: "#F1F5F9", borderRadius: 10, width: 64 }} />
+            <div style={{ height: 20, background: "#F1F5F9", borderRadius: 4, width: 40 }} />
           </div>
         </div>
-      )}
-
-      {/* Prediction */}
-      <div>
-        <div className="text-xs font-semibold text-gray-600 mb-1">Price Prediction</div>
-        <div className="flex items-center gap-3">
-          <span className={`text-sm font-semibold ${trend.color}`}>
-            {trend.symbol}{pctChange}%
-          </span>
-          <span className="text-xs text-gray-500">
-            Confidence {confidence}%
-          </span>
-        </div>
-        <p className="text-xs text-gray-600 mt-1">{alt.prediction?.recommendation ?? ""}</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── EmptyDetailState ───
-
-function EmptyDetailState() {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-      <div className="text-3xl mb-2">&#128722;</div>
-      <p className="text-sm text-gray-500">
-        Select an alternative from the left panel to see full details.
-      </p>
+      ))}
     </div>
   );
 }
 
 // ─── ErrorBanner ───
 
-function ErrorBanner({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
+function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="mx-5 mt-2 bg-red-50 border border-red-200 rounded-xl p-3 flex items-center justify-between gap-2">
-      <p className="text-sm text-red-700">{message}</p>
+    <div
+      style={{
+        margin: "8px 20px",
+        background: "#FEF2F2",
+        border: "1px solid #FECACA",
+        borderRadius: 12,
+        padding: 12,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+      }}
+    >
+      <p style={{ fontSize: 14, color: "#DC2626", margin: 0 }}>{message}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="shrink-0 text-sm font-semibold text-red-600 hover:underline"
+        style={{
+          fontSize: 14,
+          fontWeight: 600,
+          color: "#DC2626",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          textDecoration: "underline",
+        }}
       >
         Retry
       </button>
@@ -823,173 +408,511 @@ function ErrorBanner({
   );
 }
 
+// ─── Overview: Basket Plan Hero Card ───
+
+function BasketPlanHero({ plan }: { plan: BasketPlan }) {
+  const direction = plan.totalPrediction?.direction ?? "flat";
+  const trend = trendInfo(direction);
+
+  return (
+    <div
+      style={{
+        background: "linear-gradient(135deg, #EEF2FF, #E0E7FF)",
+        border: "1px solid #C7D2FE",
+        borderRadius: 16,
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: "#4F46E5",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          marginBottom: 8,
+        }}
+      >
+        Recommended Basket Plan
+      </div>
+      <p style={{ fontSize: 14, fontWeight: 500, color: "#1E293B", margin: "0 0 12px 0" }}>
+        {plan.summary}
+      </p>
+
+      {/* Total price + trend */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>
+        <span style={{ fontSize: 28, fontWeight: 700, color: "#0F172A" }}>
+          {formatUsd(plan.totalUsd)}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: trend.color }}>
+          {trend.symbol}
+          {plan.totalPrediction?.percentChange ?? 0}%
+        </span>
+        <span style={{ fontSize: 12, color: "#64748B" }}>7d</span>
+      </div>
+
+      {/* Store breakdown */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+        {plan.storeBreakdown.map((sb) => (
+          <div
+            key={sb.store}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontSize: 13,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, color: "#334155" }}>{sb.store}</span>
+              <span style={{ color: "#94A3B8" }}>
+                {sb.items.length} item{sb.items.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <span style={{ fontWeight: 600, color: "#334155" }}>{formatUsd(sb.subtotalUsd)}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 13, color: "#4F46E5", fontWeight: 500 }}>{plan.savings}</div>
+    </div>
+  );
+}
+
+// ─── Overview: Item Card ───
+
+function OverviewItemCard({
+  item,
+  customPicks,
+  onClick,
+}: {
+  item: BasketItemWithAlts;
+  customPicks: Record<string, string>;
+  onClick: () => void;
+}) {
+  const pickId = customPicks[item.query];
+  const picked = pickId
+    ? item.alternatives.find((a) => altId(a) === pickId) ?? item.alternatives[0]
+    : item.alternatives[0];
+
+  if (!picked?.product) return null;
+
+  const isRecommended = !pickId; // recommended = using default best
+  const score = picked.health?.score ?? 0;
+  const hc = healthColor(score);
+  const direction = picked.prediction?.direction ?? "flat";
+  const trend = trendInfo(direction);
+  const pctChange = picked.prediction?.percentChange ?? 0;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: 14,
+        borderRadius: 16,
+        border: "1px solid #E2E8F0",
+        background: "#FFFFFF",
+        cursor: "pointer",
+        transition: "all 0.15s ease",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
+        (e.currentTarget as HTMLElement).style.borderColor = "#CBD5E1";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "0 1px 2px rgba(0,0,0,0.04)";
+        (e.currentTarget as HTMLElement).style.borderColor = "#E2E8F0";
+      }}
+    >
+      {/* Row 1: Star + Store name -> Price */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          {isRecommended && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 6px",
+                borderRadius: 6,
+                color: "#92400E",
+                background: "#FEF3C7",
+                border: "1px solid #FDE68A",
+                flexShrink: 0,
+              }}
+            >
+              &#9733;
+            </span>
+          )}
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              color: "#0F172A",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {picked.product.store}
+          </span>
+        </div>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#0F172A", flexShrink: 0 }}>
+          {formatUsd(picked.product.priceUsd)}
+        </span>
+      </div>
+
+      {/* Row 2: Health badge + Trend + Product name */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: 10,
+            background: hc.bg,
+            color: hc.fg,
+            flexShrink: 0,
+          }}
+        >
+          {hc.text} {score}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 500, color: trend.color, flexShrink: 0 }}>
+          {trend.symbol}
+          {pctChange}%
+        </span>
+        <span
+          style={{
+            fontSize: 13,
+            color: "#64748B",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {picked.product.name}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+// ─── Detail: Alternative Card with Swap button ───
+
+function DetailAltCard({
+  alt,
+  onSwap,
+}: {
+  alt: ItemAlternative;
+  onSwap: () => void;
+}) {
+  const score = alt.health?.score ?? 0;
+  const hc = healthColor(score);
+  const direction = alt.prediction?.direction ?? "flat";
+  const trend = trendInfo(direction);
+  const pctChange = alt.prediction?.percentChange ?? 0;
+
+  return (
+    <div
+      style={{
+        padding: 14,
+        borderRadius: 16,
+        border: "1px solid #E2E8F0",
+        background: "#FFFFFF",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+      }}
+    >
+      {/* Top row: product name + price */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "#0F172A",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {alt.product.name}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#334155", marginTop: 2 }}>
+            {alt.product.store}
+          </div>
+        </div>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "#0F172A", flexShrink: 0 }}>
+          {formatUsd(alt.product.priceUsd)}
+        </span>
+      </div>
+
+      {/* Bottom row: health badge + trend + swap button */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginTop: 10,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px 8px",
+              borderRadius: 10,
+              background: hc.bg,
+              color: hc.fg,
+            }}
+          >
+            {hc.text} {score}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: trend.color }}>
+            {trend.symbol}
+            {pctChange}%
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onSwap}
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#FFFFFF",
+            background: "#4F46E5",
+            border: "none",
+            borderRadius: 8,
+            padding: "6px 16px",
+            cursor: "pointer",
+            transition: "background 0.15s ease",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "#4338CA";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "#4F46E5";
+          }}
+        >
+          Swap
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Detail View: Product Detail + Alternatives ───
+
+function DetailView({
+  item,
+  customPicks,
+  onBack,
+  onSwap,
+  activeStoreId,
+}: {
+  item: BasketItemWithAlts;
+  customPicks: Record<string, string>;
+  onBack: () => void;
+  onSwap: (itemQuery: string, swapAltId: string) => void;
+  activeStoreId: string | null;
+}) {
+  const pickId = customPicks[item.query];
+  const picked = pickId
+    ? item.alternatives.find((a) => altId(a) === pickId) ?? item.alternatives[0]
+    : item.alternatives[0];
+
+  const score = picked.health?.score ?? 0;
+  const ingredients = picked.ingredients ?? [];
+  const otherAlts = item.alternatives.filter((a) => altId(a) !== altId(picked));
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+        animation: "fadeIn 0.2s ease",
+      }}
+    >
+      {/* Back button */}
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 14,
+          fontWeight: 500,
+          color: "#4F46E5",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >
+        <span style={{ fontSize: 18 }}>&larr;</span>
+        Back to basket
+      </button>
+
+      {/* Product Detail Card */}
+      <div
+        style={{
+          background: "#FFFFFF",
+          border: "1px solid #E2E8F0",
+          borderRadius: 16,
+          padding: 20,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: "#0F172A",
+                margin: 0,
+                lineHeight: 1.3,
+              }}
+            >
+              {picked.product.name}
+            </h2>
+            <p style={{ fontSize: 14, color: "#64748B", margin: "4px 0 0 0" }}>
+              {picked.product.store} &middot; {picked.product.brand} &middot; {picked.product.size}
+            </p>
+            <p
+              style={{
+                fontSize: 22,
+                fontWeight: 700,
+                color: "#0F172A",
+                margin: "12px 0 0 0",
+              }}
+            >
+              {formatUsd(picked.product.priceUsd)}
+            </p>
+          </div>
+
+          {/* Circular Score */}
+          <div style={{ flexShrink: 0 }}>
+            <CircularScore score={score} size={80} />
+          </div>
+        </div>
+
+        {/* Ingredients */}
+        {ingredients.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div
+              style={{ fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}
+            >
+              Ingredients:
+            </div>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: 18,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
+              {ingredients.map((ing, i) => (
+                <li key={i} style={{ fontSize: 13, color: "#64748B" }}>
+                  {ing}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Health summary */}
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontSize: 13, color: "#64748B", margin: 0 }}>
+            {picked.health?.summary ?? "No health data available."}
+          </p>
+        </div>
+      </div>
+
+      {/* Alternatives Section */}
+      {otherAlts.length > 0 && (
+        <div>
+          <h3
+            style={{
+              fontSize: 16,
+              fontWeight: 600,
+              color: "#0F172A",
+              margin: "0 0 12px 0",
+            }}
+          >
+            Alternatives
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {otherAlts.map((alt) => (
+              <DetailAltCard
+                key={altId(alt)}
+                alt={alt}
+                onSwap={() => onSwap(item.query, altId(alt))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Widget ───
 
 const CartQuantWidget: React.FC = () => {
-  const widgetData = useWidget<
-    CompareBasketWidgetProps,
-    Record<string, unknown>,
-    Record<string, unknown>,
-    Record<string, unknown>,
-    CompareBasketToolInput
-  >();
-
-  const initialToolInput = normalizeToolInput(widgetData.toolInput);
+  const widgetData = useWidget<CompareBasketWidgetProps>();
 
   const [state, setState] = useState<WidgetState>(() => {
     const initial = widgetData.props?.response ?? null;
-    const initialItems =
-      initial?.items.map((entry) => entry.query) ?? initialToolInput.items;
-    const initialMode = initial?.mode ?? initialToolInput.mode;
-    const firstItem = initialItems[0] ?? DEMO_ITEMS[0];
-
     return {
-      items: initialItems,
-      avoid: initialToolInput.avoid,
-      mode: initialMode,
-      selectedItemQuery: firstItem,
-      selectedAltId: null,
-      activeStoreId: null,
-      searchQuery: "",
+      view: "overview",
+      selectedItemQuery: null,
       results: initial,
       loading: false,
       error: null,
-      minimizeStops: false,
+      activeStoreId: null,
+      customPicks: {},
     };
   });
 
-  const cache = useRef<Record<string, CompareBasketResponse>>({});
-
-  if (state.results) {
-    const key = buildCacheKey(state.results.mode, state.items, state.avoid);
-    if (!cache.current[key]) {
-      cache.current[key] = state.results;
-    }
-  }
-
-  const fetchResults = useCallback(
-    async (
-      mode: Mode,
-      overrides?: {
-        items?: string[];
-        avoid?: string[];
-      }
-    ) => {
-      const items = overrides?.items ?? state.items;
-      const avoid = overrides?.avoid ?? state.avoid;
-      const cacheKey = buildCacheKey(mode, items, avoid);
-      const cached = cache.current[cacheKey];
-
-      if (cached) {
-        setState((s) => ({
-          ...s,
-          mode,
-          items: [...items],
-          avoid: [...avoid],
-          results: cached,
-          loading: false,
-          error: null,
-          selectedItemQuery: cached.items[0]?.query ?? s.selectedItemQuery,
-          selectedAltId: null,
-          activeStoreId: null,
-        }));
-        return;
-      }
-
-      setState((s) => ({
-        ...s,
-        mode,
-        items: [...items],
-        avoid: [...avoid],
-        loading: true,
-        error: null,
-        selectedAltId: null,
-        activeStoreId: null,
-      }));
-
+  const fetchResults = useCallback(() => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    setTimeout(() => {
       try {
-        const toolResult = await widgetData.callTool("compare-basket", {
-          items,
-          mode,
-          ...(avoid.length > 0 ? { avoid } : {}),
-        });
-
-        const response = extractCompareBasketResponse(toolResult);
-        if (!response) {
-          throw new Error("Missing structured response from compare-basket tool.");
-        }
-
-        cache.current[cacheKey] = response;
+        const data = getMockBasketResponse("balanced");
         setState((s) => ({
           ...s,
-          mode,
-          items: response.items.map((entry) => entry.query),
-          avoid: [...avoid],
-          results: response,
+          results: data,
           loading: false,
-          error: null,
-          selectedItemQuery: response.items[0]?.query ?? s.selectedItemQuery,
-          selectedAltId: null,
-          activeStoreId: null,
+          customPicks: {},
         }));
       } catch {
-        const fallback = buildMockFallbackForItems(mode, items);
-        cache.current[cacheKey] = fallback;
         setState((s) => ({
           ...s,
-          mode,
-          items: fallback.items.map((entry) => entry.query),
-          avoid: [...avoid],
-          results: fallback,
           loading: false,
-          error: "Live compare tool failed, showing fallback data.",
-          selectedItemQuery: fallback.items[0]?.query ?? s.selectedItemQuery,
-          selectedAltId: null,
-          activeStoreId: null,
+          error: "Failed to fetch basket comparison. Please try again.",
         }));
       }
-    },
-    [state.items, state.avoid, widgetData.callTool]
-  );
-
-  const handleRun = useCallback(() => {
-    cache.current = {};
-    fetchResults(state.mode);
-  }, [state.mode, fetchResults]);
-
-  const handleModeChange = useCallback(
-    (m: Mode) => fetchResults(m),
-    [fetchResults]
-  );
+    }, 600);
+  }, []);
 
   const handleLoadDemo = useCallback(() => {
-    cache.current = {};
-    fetchResults(state.mode, { items: [...DEMO_ITEMS], avoid: [] });
-  }, [fetchResults, state.mode]);
-
-  const handleAddAvoid = useCallback((flag: string) => {
-    setState((s) => {
-      if (s.avoid.includes(flag.toLowerCase())) return s;
-      return { ...s, avoid: [...s.avoid, flag.toLowerCase()] };
-    });
-  }, []);
-
-  const handleRemoveAvoid = useCallback((flag: string) => {
-    setState((s) => ({
-      ...s,
-      avoid: s.avoid.filter((f) => f !== flag),
-    }));
-  }, []);
-
-  const handleSelectAlt = useCallback((alt: ItemAlternative) => {
-    const id = altId(alt);
-    const store = alt.product?.store ?? null;
-    setState((s) => ({
-      ...s,
-      selectedAltId: s.selectedAltId === id ? null : id,
-      activeStoreId: s.selectedAltId === id ? null : store,
-    }));
-  }, []);
+    fetchResults();
+  }, [fetchResults]);
 
   const handleStoreClick = useCallback((storeName: string) => {
     setState((s) => ({
@@ -998,68 +921,110 @@ const CartQuantWidget: React.FC = () => {
     }));
   }, []);
 
-  // Active tab's item data
-  const activeItem = useMemo(
-    () => state.results?.items.find((i) => i.query === state.selectedItemQuery) ?? null,
+  const handleItemClick = useCallback((query: string) => {
+    setState((s) => ({
+      ...s,
+      view: "detail",
+      selectedItemQuery: query,
+    }));
+  }, []);
+
+  const handleBack = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      view: "overview",
+      selectedItemQuery: null,
+    }));
+  }, []);
+
+  const handleSwap = useCallback((itemQuery: string, swapAltId: string) => {
+    setState((s) => ({
+      ...s,
+      customPicks: { ...s.customPicks, [itemQuery]: swapAltId },
+      view: "overview",
+      selectedItemQuery: null,
+    }));
+  }, []);
+
+  // Basket plan (recomputed when customPicks or results change)
+  const basketPlan = useMemo(() => {
+    if (!state.results) return null;
+    return computePlan(state.results.items, state.customPicks);
+  }, [state.results, state.customPicks]);
+
+  // Selected item for detail view
+  const selectedItem = useMemo(
+    () =>
+      state.results?.items.find((i) => i.query === state.selectedItemQuery) ?? null,
     [state.results, state.selectedItemQuery]
   );
 
-  // Filtered alternatives (client-side only, NEVER calls tools)
-  const filteredAlts = useMemo(() => {
-    if (!activeItem) return [];
-    const q = state.searchQuery.toLowerCase();
-    return activeItem.alternatives.filter((alt) => {
-      if (!alt?.product) return false;
-      return (
-        !q ||
-        alt.product.store.toLowerCase().includes(q) ||
-        alt.product.name.toLowerCase().includes(q) ||
-        alt.product.brand.toLowerCase().includes(q)
-      );
-    });
-  }, [activeItem, state.searchQuery]);
-
-  // Selected alternative (resolved by selectedAltId)
-  const selectedAlt = useMemo(() => {
-    if (!state.selectedAltId || !activeItem) return null;
-    return (
-      activeItem.alternatives.find((a) => altId(a) === state.selectedAltId) ?? null
-    );
-  }, [activeItem, state.selectedAltId]);
-
-  // Basket plan (recomputed based on minimize stops)
-  const basketPlan = useMemo(() => {
-    if (!state.results) return null;
-    return state.minimizeStops
-      ? computePlanMinStops(state.results.items, state.mode)
-      : computePlanBestPerItem(state.results.items, state.mode);
-  }, [state.results, state.mode, state.minimizeStops]);
-
-  const itemList = state.results?.items.map((i) => i.query) ?? state.items;
-
-  // ─── Render ───
-
-  // Empty state: no results yet
+  // ─── Render: Empty state ───
   if (!state.results && !state.loading && !state.error) {
     return (
       <McpUseProvider>
-        <div className="bg-white h-full flex flex-col font-sans">
-          <TopBar
-            mode={state.mode}
-            onModeChange={handleModeChange}
-            minimizeStops={state.minimizeStops}
-            onMinimizeStopsChange={(v) => setState((s) => ({ ...s, minimizeStops: v }))}
-          />
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-3">
-              <div className="text-4xl">&#128722;</div>
-              <p className="text-sm text-gray-500">
+        <div
+          style={{
+            background: "#F8FAFC",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            fontFamily: "system-ui, -apple-system, Inter, sans-serif",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "16px 24px",
+              borderBottom: "1px solid #E2E8F0",
+              background: "#FFFFFF",
+            }}
+          >
+            <h1
+              style={{
+                fontSize: 24,
+                fontWeight: 700,
+                color: "#0F172A",
+                margin: 0,
+                letterSpacing: "-0.025em",
+              }}
+            >
+              CartQuant
+            </h1>
+          </div>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>&#128722;</div>
+              <p style={{ fontSize: 14, color: "#64748B", margin: "0 0 16px 0" }}>
                 Compare prices, health scores &amp; trends across stores
               </p>
               <button
                 type="button"
                 onClick={handleLoadDemo}
-                className="bg-gray-900 text-white text-sm font-semibold py-2 px-5 rounded-lg hover:bg-gray-800 transition-colors"
+                style={{
+                  background: "#4F46E5",
+                  color: "#FFFFFF",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  padding: "10px 24px",
+                  borderRadius: 12,
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "background 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = "#4338CA";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = "#4F46E5";
+                }}
               >
                 Load Demo Basket
               </button>
@@ -1070,98 +1035,149 @@ const CartQuantWidget: React.FC = () => {
     );
   }
 
+  // ─── Render: Main (Overview or Detail) ───
   return (
     <McpUseProvider>
-      <div className="bg-gray-50 h-full flex flex-col font-sans">
-        {/* Top Bar */}
-        <TopBar
-          mode={state.mode}
-          onModeChange={handleModeChange}
-          minimizeStops={state.minimizeStops}
-          onMinimizeStopsChange={(v) => setState((s) => ({ ...s, minimizeStops: v }))}
-        />
-
-        {/* Item Tabs */}
-        <ItemTabs
-          items={itemList}
-          selectedItemQuery={state.selectedItemQuery}
-          onSelect={(tab) =>
-            setState((s) => ({ ...s, selectedItemQuery: tab, selectedAltId: null, activeStoreId: null }))
-          }
-        />
+      <div
+        style={{
+          background: "#F8FAFC",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          fontFamily: "system-ui, -apple-system, Inter, sans-serif",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "12px 24px",
+            borderBottom: "1px solid #E2E8F0",
+            background: "#FFFFFF",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 24,
+              fontWeight: 700,
+              color: "#0F172A",
+              margin: 0,
+              letterSpacing: "-0.025em",
+            }}
+          >
+            CartQuant
+          </h1>
+        </div>
 
         {/* Error */}
-        {state.error && <ErrorBanner message={state.error} onRetry={handleRun} />}
+        {state.error && <ErrorBanner message={state.error} onRetry={fetchResults} />}
 
-        {/* Main Layout: Two-panel Luma-style */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Panel (~380px): alternative cards list */}
-          <div className="w-[380px] shrink-0 border-r border-gray-200 bg-white overflow-y-auto p-4 space-y-3">
-            <FilterInput
-              value={state.searchQuery}
-              onChange={(v) => setState((s) => ({ ...s, searchQuery: v }))}
-            />
-
-            <AvoidChips avoid={state.avoid} onRemove={handleRemoveAvoid} />
-
+        {/* Main two-column layout */}
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          {/* Left Column (~50%) */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 0,
+            }}
+          >
             {state.loading ? (
               <SkeletonCardList />
+            ) : state.view === "detail" && selectedItem ? (
+              <DetailView
+                item={selectedItem}
+                customPicks={state.customPicks}
+                onBack={handleBack}
+                onSwap={handleSwap}
+                activeStoreId={state.activeStoreId}
+              />
             ) : (
-              <div className="space-y-2">
-                {filteredAlts.map((alt, idx) => {
-                  const id = altId(alt);
-                  return (
-                    <AlternativeCard
-                      key={id}
-                      alt={alt}
-                      isSelected={id === state.selectedAltId}
-                      isRecommended={idx === 0}
-                      onClick={() => handleSelectAlt(alt)}
+              /* Overview content */
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  animation: "fadeIn 0.2s ease",
+                }}
+              >
+                {/* Basket Plan Hero */}
+                {basketPlan && <BasketPlanHero plan={basketPlan} />}
+
+                {/* Item Cards */}
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                >
+                  {state.results?.items.map((item) => (
+                    <OverviewItemCard
+                      key={item.query}
+                      item={item}
+                      customPicks={state.customPicks}
+                      onClick={() => handleItemClick(item.query)}
                     />
-                  );
-                })}
-                {filteredAlts.length === 0 && !state.loading && (
-                  <p className="text-xs text-gray-400 text-center py-4">
-                    No alternatives match your filter.
-                  </p>
-                )}
+                  ))}
+                </div>
+
+                {/* Book Button */}
+                <button
+                  type="button"
+                  style={{
+                    width: "100%",
+                    padding: "14px 0",
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: "#FFFFFF",
+                    background: "#4F46E5",
+                    border: "none",
+                    borderRadius: 14,
+                    cursor: "pointer",
+                    transition: "background 0.15s ease",
+                    marginTop: 4,
+                    boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "#4338CA";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "#4F46E5";
+                  }}
+                >
+                  Book
+                </button>
               </div>
             )}
           </div>
 
-          {/* Right Panel (flex-1): BasketPlanHero, MapPlaceholder, SelectedDetail */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {state.loading ? (
-              <SkeletonDetail />
-            ) : (
-              <>
-                {/* Basket Plan Hero */}
-                {basketPlan && <BasketPlanHero plan={basketPlan} />}
-
-                {/* Map Placeholder */}
-                {basketPlan && (
-                  <MapPlaceholder
-                    storeBreakdown={basketPlan.storeBreakdown}
-                    activeStoreId={state.activeStoreId}
-                    onStoreClick={handleStoreClick}
-                  />
-                )}
-
-                {/* Selected Detail */}
-                {selectedAlt && activeItem ? (
-                  <SelectedDetail
-                    alt={selectedAlt}
-                    query={activeItem.query}
-                    onFlagClick={handleAddAvoid}
-                  />
-                ) : (
-                  <EmptyDetailState />
-                )}
-              </>
+          {/* Right Column (~50%): Map */}
+          <div
+            style={{
+              flex: 1,
+              borderLeft: "1px solid #E2E8F0",
+              position: "relative",
+              minHeight: 300,
+            }}
+          >
+            {basketPlan && (
+              <MapPanel
+                storeBreakdown={basketPlan.storeBreakdown}
+                activeStoreId={state.activeStoreId}
+                onStoreClick={handleStoreClick}
+              />
             )}
           </div>
         </div>
       </div>
+
+      {/* Inline keyframe for fadeIn animation */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </McpUseProvider>
   );
 };

@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* ─── Inter font (loaded via Google Fonts CDN in HTML, fallback to system) ─── */
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 /* ─── Height propagation for iframe embedding ─── */
 html, :root { height: 100%; }
 body { height: 100%; margin: 0; padding: 0; }
@@ -9,14 +16,9 @@ body { height: 100%; margin: 0; padding: 0; }
 *, *::before, *::after { box-sizing: border-box; }
 
 /* ─── Flex layout fix: allow flex children to shrink below content size ─── */
-/* This is critical for overflow-y-auto to work inside flex containers */
 .flex-1 { min-height: 0; }
 .flex { min-height: 0; }
-
-/* Also apply to the flex column container */
 .flex-col { min-height: 0; }
-
-/* Ensure the main two-panel area can shrink */
 .overflow-hidden { min-height: 0; }
 
 /* ─── Map container stable height ─── */
@@ -25,11 +27,70 @@ body { height: 100%; margin: 0; padding: 0; }
 /* ─── Smooth scrollbar styling ─── */
 .overflow-y-auto {
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
+  scrollbar-color: #cbd5e1 transparent;
 }
 .overflow-y-auto::-webkit-scrollbar { width: 6px; }
 .overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background-color: #d1d5db;
+  background-color: #cbd5e1;
   border-radius: 3px;
+}
+
+/* ─── Card interaction states ─── */
+.item-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+.item-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.item-card:active {
+  transform: translateY(0);
+}
+
+/* ─── Swap button ─── */
+.swap-btn {
+  transition: all 0.15s ease;
+}
+.swap-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+/* ─── Book button ─── */
+.book-btn {
+  transition: all 0.2s ease;
+}
+.book-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.35);
+}
+.book-btn:active {
+  transform: translateY(0);
+}
+
+/* ─── View transitions ─── */
+.view-enter {
+  animation: fadeSlideIn 0.25s ease-out;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Circular score animation ─── */
+.score-ring {
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Health badge pills ─── */
+.health-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }

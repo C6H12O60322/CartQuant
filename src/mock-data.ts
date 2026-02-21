@@ -34,6 +34,22 @@ const STORE_PROFILES: StoreProfile[] = [
     distanceMiles: 4.1,
   },
   {
+    name: "Safeway",
+    source: "api",
+    sourceUrl: "https://www.safeway.com/",
+    priceMultiplier: 0.97,
+    qualityBase: 73,
+    distanceMiles: 4.9,
+  },
+  {
+    name: "Target",
+    source: "api",
+    sourceUrl: "https://www.target.com/",
+    priceMultiplier: 0.95,
+    qualityBase: 74,
+    distanceMiles: 5.1,
+  },
+  {
     name: "Whole Foods",
     source: "api",
     sourceUrl: "https://www.wholefoodsmarket.com/",
@@ -233,6 +249,19 @@ function baselineCartTotal(input: CartPlanInput): number {
 export function buildCartOptions(input: CartPlanInput): CartOption[] {
   const baselineTotal = baselineCartTotal(input);
   return strategyOrder.map((strategy) => buildOption(input, strategy, baselineTotal));
+}
+
+export function buildItemStoreQuotes(
+  input: Pick<CartPlanInput, "zipCode" | "maxDistanceMiles" | "items">
+): Record<string, RankedStoreQuote[]> {
+  const byItem: Record<string, RankedStoreQuote[]> = {};
+
+  for (const item of input.items) {
+    const itemKey = item.name.trim().toLowerCase();
+    byItem[itemKey] = buildCandidates(item, input.zipCode, input.maxDistanceMiles);
+  }
+
+  return byItem;
 }
 
 export function searchCatalog(query: string): SearchResultItem[] {

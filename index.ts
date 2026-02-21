@@ -1,6 +1,7 @@
 import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
-import { buildCartOptions, getResultById, searchCatalog } from "./src/mock-data.js";
+import { buildCartOptions, getResultById } from "./src/mock-data.js";
+import { registerSearchCatalogTool } from "./src/tools/search-catalog.js";
 import type { CartPlanInput } from "./server";
 
 const server = new MCPServer({
@@ -91,23 +92,7 @@ server.tool(
   }
 );
 
-server.tool(
-  {
-    name: "search-catalog",
-    description: "Search CartQuant product source catalog entries",
-    schema: z.object({
-      query: z.string().describe("Search term"),
-    }),
-  },
-  async ({ query }) => {
-    const results = searchCatalog(query);
-    return object({
-      query,
-      count: results.length,
-      results,
-    });
-  }
-);
+registerSearchCatalogTool(server);
 
 server.tool(
   {

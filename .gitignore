@@ -5,3 +5,6 @@ dist/
 *.log
 __tmp_scaffold/
 __tmp_blank/
+.env
+.cursor
+.claude

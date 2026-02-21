@@ -71,7 +71,56 @@ Suggested flow:
 3. Add your custom MCP app/connector URL in Apps/Connectors.
 4. Start a chat and invoke `build-cart-plan`.
 
-## 5) Replace mocks with real APIs
+## 5) MCP Servers
+
+This repository includes multiple MCP servers organized in the `src/mcp-servers/` directory:
+
+### CartQuant (Main Server)
+The main cart optimization server that compares grocery options.
+
+**Port:** 3000  
+**Tools:**
+- `build-cart-plan` - Generate cart options from a shopping list
+- `search-catalog` - Search product catalog
+- `fetch-catalog-entry` - Get detailed product metadata
+
+### Trader Joe's Scraper
+Web scraper for Trader Joe's products using Firecrawl.
+
+**Port:** 3001  
+**Location:** `src/mcp-servers/traderjoes/`  
+**Tools:**
+- `search-traderjoes-products` - Search for products by name/category
+- `scrape-traderjoes-product` - Get detailed product info from URL
+- `scrape-traderjoes-category` - Scrape all products from a category page
+
+**Environment Variables:**
+```bash
+FIRECRAWL_API_KEY=your_api_key_here
+```
+
+**Testing:**
+```bash
+# Build the project first
+npm run build
+
+# Run the test client
+npm run traderjoes:test
+```
+
+### Running Multiple Servers
+
+Both servers are configured in `mcp.json` and can be run simultaneously:
+
+```bash
+# Terminal 1 - Main CartQuant server
+npm run dev
+
+# Terminal 2 - Trader Joe's scraper (after building)
+npm run traderjoes:start
+```
+
+## 6) Replace mocks with real APIs
 
 Start by replacing functions in `src/mock-data.ts`:
 

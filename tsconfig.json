@@ -23,6 +23,7 @@
     "index.ts",
     "src/**/*",
     "resources/**/*",
+    "src/mcp-servers/**/*",
     "server.d.ts",
     "server.ts",
     ".mcp-use/**/*.d.ts"

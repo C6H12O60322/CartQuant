@@ -1,6 +1,7 @@
 import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { buildCartOptions, getResultById, searchCatalog } from "./src/mock-data.js";
+import { geocodeLocation, findStoresNearby } from "./src/google-maps.js";
 import type { BasketMode, CartPlanInput } from "./server";
 
 const server = new MCPServer({
@@ -178,6 +179,102 @@ server.tool(
         `Compared ${response.items.length} items in ${mode} mode. Total: $${response.plan.totalUsd.toFixed(2)}. ${response.plan.summary}`
       ),
     });
+  }
+);
+
+// ─── Geocoding Tool ───
+
+const geocodeSchema = z.object({
+  address: z
+    .string()
+    .min(1)
+    .describe(
+      "Address or zip code to geocode (e.g. '94110', 'San Francisco, CA')"
+    ),
+});
+
+server.tool(
+  {
+    name: "geocode-location",
+    description:
+      "Convert an address or zip code to lat/lng coordinates using Google Geocoding API",
+    schema: geocodeSchema,
+  },
+  async ({ address }) => {
+    try {
+      const result = await geocodeLocation(address);
+      return object({
+        address,
+        lat: result.lat,
+        lng: result.lng,
+        formattedAddress: result.formattedAddress,
+      });
+    } catch (err: any) {
+      return text(`Geocoding error: ${err.message}`);
+    }
+  }
+);
+
+// ─── Find Stores Nearby Tool ───
+
+const findStoresSchema = z.object({
+  lat: z.number().describe("Latitude of the search center"),
+  lng: z.number().describe("Longitude of the search center"),
+  storeNames: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Store chains to search for (defaults to Trader Joe's, Whole Foods, Safeway, Kroger, Target)"
+    ),
+  radiusMeters: z
+    .number()
+    .positive()
+    .optional()
+    .default(8000)
+    .describe("Search radius in meters (default 8000 = ~5 miles)"),
+  maxPerStore: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .default(3)
+    .describe("Max locations to return per store chain (default 3)"),
+});
+
+server.tool(
+  {
+    name: "find-stores-nearby",
+    description:
+      "Find real grocery store locations near a point using Google Places API. Returns place IDs, addresses, and coordinates for each store chain.",
+    schema: findStoresSchema,
+  },
+  async (input) => {
+    try {
+      const radiusMeters = input.radiusMeters ?? 8000;
+      const maxPerStore = input.maxPerStore ?? 3;
+
+      const stores = await findStoresNearby(
+        input.lat,
+        input.lng,
+        input.storeNames,
+        radiusMeters,
+        maxPerStore
+      );
+
+      const totalLocations = Object.values(stores).reduce(
+        (sum, locs) => sum + locs.length,
+        0
+      );
+
+      return object({
+        center: { lat: input.lat, lng: input.lng },
+        radiusMeters,
+        stores,
+        totalLocations,
+      });
+    } catch (err: any) {
+      return text(`Store search error: ${err.message}`);
+    }
   }
 );
 

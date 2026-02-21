@@ -1,7 +1,7 @@
 import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { buildCartOptions, getResultById, searchCatalog } from "./src/mock-data.js";
-import type { CartPlanInput } from "./server";
+import type { BasketMode, CartPlanInput } from "./server";
 
 const server = new MCPServer({
   name: "cartquant",
@@ -131,6 +131,52 @@ server.tool(
           ? "Official API source with higher reliability."
           : "Fallback scrape source. Treat pricing as estimate until verified.",
       ],
+    });
+  }
+);
+
+const compareBasketSchema = z.object({
+  items: z
+    .array(z.string())
+    .min(1)
+    .describe("Grocery items to compare (e.g. milk, eggs, bread)"),
+  avoid: z
+    .array(z.string())
+    .optional()
+    .describe("Ingredients or flags to avoid (e.g. high sugar, artificial colors)"),
+  mode: z
+    .enum(["cheapest", "cleanest", "balanced"])
+    .default("balanced")
+    .describe("Optimization mode: cheapest, cleanest ingredients, or balanced"),
+});
+
+server.tool(
+  {
+    name: "compare-basket",
+    description:
+      "Compare grocery basket across stores with health scores, ingredient flags, and price predictions",
+    schema: compareBasketSchema,
+    widget: {
+      name: "cartquant-plan",
+      invoking: "Comparing basket across stores...",
+      invoked: "Basket comparison ready",
+    },
+  },
+  async (input) => {
+    const mode = (input.mode || "balanced") as BasketMode;
+    // Dynamic import to work with the resource mock data
+    const { getMockBasketResponse } = await import(
+      "./resources/cartquant-plan/mock-data.js"
+    );
+    const response = getMockBasketResponse(mode);
+
+    return widget({
+      props: {
+        response,
+      },
+      output: text(
+        `Compared ${response.items.length} items in ${mode} mode. Total: $${response.totalUsd.toFixed(2)}. ${response.recommendation}`
+      ),
     });
   }
 );

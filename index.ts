@@ -2,6 +2,7 @@ import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { buildCartOptions, getResultById } from "./src/mock-data.js";
 import { registerSearchCatalogTool } from "./src/tools/search-catalog.js";
+import { registerSearchTraderJoesProductsTool } from "./src/tools/search-traderjoes-products.js";
 import type { CartPlanInput } from "./server";
 
 const server = new MCPServer({
@@ -11,6 +12,7 @@ const server = new MCPServer({
   description:
     "Cart optimization MCP app that compares grocery options using API-first data with scrape fallback",
   baseUrl: process.env.MCP_URL || "http://localhost:3000",
+  stateless: true,
   websiteUrl: "https://manufact.com",
   icons: [
     {
@@ -93,6 +95,7 @@ server.tool(
 );
 
 registerSearchCatalogTool(server);
+registerSearchTraderJoesProductsTool(server);
 
 server.tool(
   {

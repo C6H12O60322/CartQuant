@@ -58,7 +58,7 @@ server.tool(
 
       const searchUrl = `https://www.traderjoes.com/home/search?q=${encodeURIComponent(query)}`;
 
-      const scrapeResult = await client.scrapeUrl(searchUrl, {
+      const scrapeResult = await client.v1.scrapeUrl(searchUrl, {
         formats: ["extract"],
         extract: {
           schema: {
@@ -112,7 +112,7 @@ server.tool(
         );
       }
 
-      const scrapeResult = await client.scrapeUrl(url, {
+      const scrapeResult = await client.v1.scrapeUrl(url, {
         formats: ["extract"],
         extract: {
           schema: {
@@ -211,7 +211,7 @@ server.tool(
         );
       }
 
-      const scrapeResult = await client.scrapeUrl(category_url, {
+      const scrapeResult = await client.v1.scrapeUrl(category_url, {
         formats: ["extract"],
         extract: {
           schema: {

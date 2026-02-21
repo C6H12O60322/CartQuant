@@ -6,7 +6,8 @@ export function registerSearchCatalogTool(server: MCPServer): void {
   server.tool(
     {
       name: "search-catalog",
-      description: "Search CartQuant product source catalog entries",
+      description:
+        "Search CartQuant's small demo catalog (mock data). For live Trader Joe's lookup, use search-traderjoes-products.",
       schema: z.object({
         query: z.string().describe("Search term"),
       }),

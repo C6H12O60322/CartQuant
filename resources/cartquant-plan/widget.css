@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/* ─── Height propagation for iframe embedding ─── */
+html, :root { height: 100%; }
+body { height: 100%; margin: 0; padding: 0; }
+#root { height: 100%; }
+
+/* ─── Universal box-sizing ─── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ─── Flex layout fix: allow flex children to shrink below content size ─── */
+/* This is critical for overflow-y-auto to work inside flex containers */
+.flex-1 { min-height: 0; }
+.flex { min-height: 0; }
+
+/* Also apply to the flex column container */
+.flex-col { min-height: 0; }
+
+/* Ensure the main two-panel area can shrink */
+.overflow-hidden { min-height: 0; }
+
+/* ─── Map container stable height ─── */
+.map-container { min-height: 200px; }
+
+/* ─── Smooth scrollbar styling ─── */
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+.overflow-y-auto::-webkit-scrollbar { width: 6px; }
+.overflow-y-auto::-webkit-scrollbar-track { background: transparent; }
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 3px;
+}

@@ -1,9 +1,7 @@
 import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
-import { buildCartOptions, getResultById } from "./src/mock-data.js";
-import { registerSearchCatalogTool } from "./src/tools/search-catalog.js";
-import { registerSearchTraderJoesProductsTool } from "./src/tools/search-traderjoes-products.js";
-import type { CartPlanInput } from "./server";
+import { buildCartOptions, getResultById, searchCatalog } from "./src/mock-data.js";
+import type { BasketMode, CartPlanInput } from "./server";
 
 const server = new MCPServer({
   name: "cartquant",
@@ -12,7 +10,6 @@ const server = new MCPServer({
   description:
     "Cart optimization MCP app that compares grocery options using API-first data with scrape fallback",
   baseUrl: process.env.MCP_URL || "http://localhost:3000",
-  stateless: true,
   websiteUrl: "https://manufact.com",
   icons: [
     {
@@ -94,8 +91,23 @@ server.tool(
   }
 );
 
-registerSearchCatalogTool(server);
-registerSearchTraderJoesProductsTool(server);
+server.tool(
+  {
+    name: "search-catalog",
+    description: "Search CartQuant product source catalog entries",
+    schema: z.object({
+      query: z.string().describe("Search term"),
+    }),
+  },
+  async ({ query }) => {
+    const results = searchCatalog(query);
+    return object({
+      query,
+      count: results.length,
+      results,
+    });
+  }
+);
 
 server.tool(
   {
@@ -119,6 +131,52 @@ server.tool(
           ? "Official API source with higher reliability."
           : "Fallback scrape source. Treat pricing as estimate until verified.",
       ],
+    });
+  }
+);
+
+const compareBasketSchema = z.object({
+  items: z
+    .array(z.string())
+    .min(1)
+    .describe("Grocery items to compare (e.g. milk, eggs, bread)"),
+  avoid: z
+    .array(z.string())
+    .optional()
+    .describe("Ingredients or flags to avoid (e.g. high sugar, artificial colors)"),
+  mode: z
+    .enum(["cheapest", "cleanest", "balanced"])
+    .default("balanced")
+    .describe("Optimization mode: cheapest, cleanest ingredients, or balanced"),
+});
+
+server.tool(
+  {
+    name: "compare-basket",
+    description:
+      "Compare grocery basket across stores with health scores, ingredient flags, and price predictions",
+    schema: compareBasketSchema,
+    widget: {
+      name: "cartquant-plan",
+      invoking: "Comparing basket across stores...",
+      invoked: "Basket comparison ready",
+    },
+  },
+  async (input) => {
+    const mode = (input.mode || "balanced") as BasketMode;
+    // Dynamic import to work with the resource mock data
+    const { getMockBasketResponse } = await import(
+      "./resources/cartquant-plan/mock-data.js"
+    );
+    const response = getMockBasketResponse(mode);
+
+    return widget({
+      props: {
+        response,
+      },
+      output: text(
+        `Compared ${response.items.length} items in ${mode} mode. Total: $${response.plan.totalUsd.toFixed(2)}. ${response.plan.summary}`
+      ),
     });
   }
 );

@@ -63,3 +63,61 @@ export interface SearchResultItem {
   url: string;
   source: "api" | "scraped";
 }
+
+// --- Compare Basket types ---
+
+export type BasketMode = "cheapest" | "cleanest" | "balanced";
+
+export type TrendDirection = "rising" | "falling" | "flat";
+
+export interface SelectedProduct {
+  name: string;
+  brand: string;
+  size: string;
+  store: string;
+  priceUsd: number;
+}
+
+export interface HealthInfo {
+  score: number;
+  flags: string[];
+  summary: string;
+}
+
+export interface PredictionInfo {
+  direction: TrendDirection;
+  percentChange: number;
+  confidence: number;
+  recommendation: string;
+}
+
+export interface ItemAlternative {
+  product: SelectedProduct;
+  health: HealthInfo;
+  prediction: PredictionInfo;
+}
+
+export interface BasketItemWithAlts {
+  query: string;
+  alternatives: ItemAlternative[];
+}
+
+export interface StoreAssignment {
+  store: string;
+  items: string[];
+  subtotalUsd: number;
+}
+
+export interface BasketPlan {
+  summary: string;
+  totalUsd: number;
+  totalPrediction: PredictionInfo;
+  storeBreakdown: StoreAssignment[];
+  savings: string;
+}
+
+export interface CompareBasketResponse {
+  mode: BasketMode;
+  plan: BasketPlan;
+  items: BasketItemWithAlts[];
+}

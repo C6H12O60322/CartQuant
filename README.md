@@ -109,6 +109,9 @@ FIRECRAWL_API_KEY=your_api_key_here
 # Build the project first
 npm run build
 
+# Start Trader Joe's server (default: http://localhost:3001/mcp)
+npm run traderjoes:start
+
 # Run the test client
 npm run grocery:test
 ```
@@ -140,7 +143,8 @@ Both servers are configured in `mcp.json` and can be run simultaneously:
 
 ```bash
 # Terminal 1 - Main CartQuant server
-npm run dev
+npm run build
+node dist/index.js
 
 # Terminal 2 - Grocery scraper (after building)
 npm run grocery:start

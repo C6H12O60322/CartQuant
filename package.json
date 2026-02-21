@@ -18,7 +18,7 @@
     "dev": "mcp-use dev",
     "start": "mcp-use start",
     "deploy": "mcp-use deploy",
-    "traderjoes:start": "node dist/src/mcp-servers/traderjoes/server.js",
+    "traderjoes:start": "cross-env NODE_ENV=production node dist/src/mcp-servers/traderjoes/server.js",
     "traderjoes:test": "npx tsx src/mcp-servers/traderjoes/tests/test-client.ts"
   },
   "dependencies": {
@@ -40,6 +40,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
+    "cross-env": "^10.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

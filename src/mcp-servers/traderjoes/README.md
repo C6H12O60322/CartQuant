@@ -1,123 +1,87 @@
 # Trader Joe's Product Scraper MCP Server
 
-An MCP server that scrapes product information from Trader Joe's website using Firecrawl.
+This MCP server scrapes Trader Joe's product information using Firecrawl.
 
 ## Features
 
-- **Search Products**: Search for products by name or category
-- **Product Details**: Get detailed product information including nutrition facts, ingredients, and allergens
-- **Category Scraping**: Scrape all products from a specific category page
+- Search products by keyword/category
+- Scrape detailed product pages (ingredients, nutrition, allergens)
+- Scrape category pages for multiple products
 
 ## Setup
 
-1. Make sure you have a Firecrawl API key in your `.env` file:
+1. Add environment variables in the root `.env`:
+
 ```bash
 FIRECRAWL_API_KEY=your_api_key_here
 ```
 
-2. Build the project from the root directory:
+2. Build from repo root:
+
 ```bash
 npm run build
 ```
 
-3. Run the server:
-```bash
-node dist/mcp-servers/traderjoes/server.js
-```
-
-The server will start on port 3001 by default.
-
-## Available Tools
-
-### 1. search-traderjoes-products
-
-Search for Trader Joe's products by name or category.
-
-**Parameters:**
-- `query` (string): Product name or category to search for (e.g., 'organic pasta', 'frozen pizza')
-- `limit` (number, optional): Maximum number of results to return (default: 5)
-
-**Example:**
-```json
-{
-  "query": "chocolate",
-  "limit": 5
-}
-```
-
-### 2. scrape-traderjoes-product
-
-Scrape detailed information from a specific Trader Joe's product page.
-
-**Parameters:**
-- `url` (string): Full URL of the Trader Joe's product page
-
-**Returns:**
-- Product name
-- Price
-- Description
-- Image URL
-- Ingredients list
-- Nutrition facts (serving size, calories, macros, etc.)
-- Allergen information
-- Category
-
-**Example:**
-```json
-{
-  "url": "https://www.traderjoes.com/home/products/pdp/organic-pasta-123456"
-}
-```
-
-### 3. scrape-traderjoes-category
-
-Scrape all products from a specific Trader Joe's category page.
-
-**Parameters:**
-- `category_url` (string): Full URL of the Trader Joe's category page
-- `max_products` (number, optional): Maximum number of products to scrape (default: 20)
-
-**Example:**
-```json
-{
-  "category_url": "https://www.traderjoes.com/home/products/category/frozen-foods",
-  "max_products": 10
-}
-```
-
-## Testing
-
-Run the test client to verify the server is working:
+3. Start the server:
 
 ```bash
-# Make sure the server is running first
-node dist/mcp-servers/traderjoes/server.js
-
-# In another terminal, run the test client
-npx tsx mcp-servers/traderjoes/tests/test-client.ts
+npm run traderjoes:start
 ```
 
-The test client will run several search queries and display the results.
+The server runs on port `3001` by default (`PORT` env can override).
 
-## Integration with CartQuant
+## Tools
 
-This scraper can be used to enhance the CartQuant main server by:
+### `search-traderjoes-products`
 
-1. Providing real product data from Trader Joe's
-2. Enriching cart optimization with actual prices and availability
-3. Adding nutrition information for dietary filtering
-4. Supporting multi-store cart comparisons
+Input:
 
-## Configuration
+- `query` (string): search term
+- `limit` (number, optional, default `5`)
 
-The server is configured in the root `mcp.json`:
+### `scrape-traderjoes-product`
+
+Input:
+
+- `url` (string, required): full Trader Joe's product URL
+
+### `scrape-traderjoes-category`
+
+Input:
+
+- `category_url` (string, required): full category URL
+- `max_products` (number, optional, default `20`)
+
+## Test Client
+
+Run after the server is up:
+
+```bash
+npm run traderjoes:test
+```
+
+Optional override if using a non-default endpoint:
+
+```bash
+MCP_SERVER_URL=http://localhost:3001/mcp npm run traderjoes:test
+```
+
+PowerShell variant:
+
+```powershell
+$env:MCP_SERVER_URL="http://localhost:3001/mcp"; npm run traderjoes:test
+```
+
+## MCP Config Reference
+
+The root `mcp.json` entry uses:
 
 ```json
 {
   "mcpServers": {
     "trader-joes-scraper": {
       "command": "node",
-      "args": ["dist/mcp-servers/traderjoes/server.js"],
+      "args": ["dist/src/mcp-servers/traderjoes/server.js"],
       "env": {
         "PORT": "3001",
         "MCP_URL": "http://localhost:3001"
@@ -129,7 +93,5 @@ The server is configured in the root `mcp.json`:
 
 ## Notes
 
-- This scraper uses Firecrawl's extraction capabilities to parse structured data from web pages
-- Rate limiting and ToS compliance are handled by Firecrawl
-- The scraper extracts data as it appears on the website at the time of scraping
-- Product availability and prices may vary by location and time
+- If `FIRECRAWL_API_KEY` is missing, tools return a clear MCP error message.
+- Scraped prices/availability can change by location and time.

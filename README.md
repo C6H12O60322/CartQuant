@@ -71,51 +71,32 @@ Suggested flow:
 3. Add your custom MCP app/connector URL in Apps/Connectors.
 4. Start a chat and invoke `build-cart-plan`.
 
-## 5) MCP Servers
+## 5) Architecture
 
-This repository includes multiple MCP servers organized in the `src/mcp-servers/` directory:
-
-### CartQuant (Main Server)
-The main cart optimization server that compares grocery options.
+CartQuant runs as a **single unified MCP server** with all tools integrated. The grocery scraper (Firecrawl) is built directly into the main server — no separate processes needed.
 
 **Port:** 3000  
-**Tools:**
+**All Tools (single server):**
 - `build-cart-plan` - Generate cart options from a shopping list
 - `search-catalog` - Search product catalog
 - `fetch-catalog-entry` - Get detailed product metadata
-
-### Multi-Store Grocery Scraper
-Web scraper for multiple grocery stores (Trader Joe's, Safeway, Target) using Firecrawl.
-
-**Location:** `src/mcp-servers/grocery-scraper/`  
-**Tools:**
-- `search-grocery-products` - Search products across multiple stores (returns top 5 from each)
+- `compare-basket` - Compare grocery basket across stores with health scores and price predictions
+- `search-grocery-products` - Search products across Trader Joe's, Safeway, and Target
 - `get-product-details` - Get detailed product info including nutrition, ingredients, and allergens
 
 **Environment Variables:**
 ```bash
-FIRECRAWL_API_KEY=your_api_key_here
+FIRECRAWL_API_KEY=your_api_key_here  # Required for live scraping; falls back to mock data without it
 ```
 
-**Features:**
-- 🏪 Search across Trader Joe's, Safeway, and Target simultaneously
-- 📊 Compare prices and products across stores
-- 🔍 Get superficial info (name, price, image) for quick comparison
-- 📋 Get detailed info (nutrition facts, ingredients, allergens) when needed
-- ⚡ Parallel searches for optimal performance
+**Key Features:**
+- Live scraping across Trader Joe's, Safeway, and Target using Firecrawl
+- Product images, descriptions, and URLs from real store pages
+- Health score estimation from product keywords
+- Automatic fallback to mock data when scraping is unavailable
+- Parallel searches for optimal performance
 
-**Testing:**
-```bash
-# Build the project first
-npm run build
-
-# Run the test client
-npm run grocery:test
-```
-
-**Example Usage:**
-
-Search across all stores:
+**Example: Search across stores**
 ```json
 {
   "tool": "search-grocery-products",
@@ -124,7 +105,16 @@ Search across all stores:
 }
 ```
 
-Get detailed product info:
+**Example: Compare basket**
+```json
+{
+  "tool": "compare-basket",
+  "items": ["milk", "eggs", "bread"],
+  "mode": "balanced"
+}
+```
+
+**Example: Get detailed product info**
 ```json
 {
   "tool": "get-product-details",
@@ -132,26 +122,17 @@ Get detailed product info:
 }
 ```
 
-See `src/mcp-servers/grocery-scraper/USAGE_EXAMPLES.md` for more examples.
+## 6) Data Sources
 
-### Running Multiple Servers
+**Live scraping (with FIRECRAWL_API_KEY):**
+- Trader Joe's, Safeway, Target product search and details via Firecrawl
 
-Both servers are configured in `mcp.json` and can be run simultaneously:
+**Fallback (without API key):**
+- Mock data in `resources/cartquant-plan/mock-data.ts`
+- Synthetic alternatives generated from hash-based deterministic functions
 
-```bash
-# Terminal 1 - Main CartQuant server
-npm run dev
-
-# Terminal 2 - Grocery scraper (after building)
-npm run grocery:start
-```
-
-## 6) Replace mocks with real APIs
-
-Start by replacing functions in `src/mock-data.ts`:
-
+**Future API integrations:**
 - Instacart Developer Platform (retailers/products/cart links)
 - Kroger Developer APIs (store/product/cart data)
 - USDA FoodData Central + Open Food Facts (nutrition/quality enrichment)
 - Places/review APIs for store quality signals
-- Scraping fallback for stores without APIs (with ToS/robots compliance)

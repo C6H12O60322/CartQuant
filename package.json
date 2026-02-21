@@ -18,10 +18,9 @@
     "dev": "mcp-use dev",
     "start": "mcp-use start",
     "deploy": "mcp-use deploy",
+    "test:flow": "npx tsx src/tests/test-full-flow.ts",
     "grocery:start": "node dist/src/mcp-servers/grocery-scraper/server.js",
-    "grocery:test": "npx tsx src/mcp-servers/grocery-scraper/tests/test-client.ts",
-    "traderjoes:start": "npm run grocery:start",
-    "traderjoes:test": "npm run grocery:test"
+    "grocery:test": "npx tsx src/mcp-servers/grocery-scraper/tests/test-client.ts"
   },
   "dependencies": {
     "@mendable/firecrawl-js": "^1.0.0",

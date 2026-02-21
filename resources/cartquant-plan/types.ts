@@ -63,6 +63,9 @@ export const selectedProductSchema = z.object({
   size: z.string(),
   store: z.string(),
   priceUsd: z.number(),
+  imageUrl: z.string().optional(),
+  description: z.string().optional(),
+  url: z.string().optional(),
 });
 export type SelectedProduct = z.infer<typeof selectedProductSchema>;
 

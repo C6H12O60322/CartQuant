@@ -1,8 +1,15 @@
-import { MCPServer, object, text, widget } from "mcp-use/server";
+import { MCPServer, object, text, error, widget } from "mcp-use/server";
 import { z } from "zod";
 import { buildCartOptions, getResultById, searchCatalog } from "./src/mock-data.js";
 import { buildCompareBasketResponse } from "./src/services/compare-basket.js";
 import { geocodeLocation, findStoresNearby } from "./src/google-maps.js";
+import {
+  searchAllStores,
+  getProductDetails,
+  detectStoreFromUrl,
+  getStoreName,
+  type StoreId,
+} from "./src/services/grocery-scraper.js";
 import type { BasketMode, CartPlanInput } from "./server";
 
 const server = new MCPServer({
@@ -278,6 +285,92 @@ server.tool(
       });
     } catch (err: any) {
       return text(`Store search error: ${err.message}`);
+    }
+  }
+);
+
+// ─── Grocery Scraper Tools (integrated from src/mcp-servers/grocery-scraper) ───
+
+server.tool(
+  {
+    name: "search-grocery-products",
+    description:
+      "Search for grocery products across Trader Joe's, Safeway, and Target. Returns the top results from each store with product name, price, image URL, description, and link.",
+    schema: z.object({
+      query: z
+        .string()
+        .describe("Product name or category to search for (e.g., 'organic pasta', 'almond milk')"),
+      stores: z
+        .array(z.enum(["traderjoes", "safeway", "target"]))
+        .optional()
+        .default(["traderjoes", "target"])
+        .describe("Which stores to search in (default: Trader Joe's and Target). Safeway available but slow."),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .optional()
+        .default(3)
+        .describe("Max results per store (default: 3)"),
+    }),
+  },
+  async ({ query, stores, limit }) => {
+    try {
+      const results = await searchAllStores(query, stores as StoreId[], limit);
+
+      const totalProducts = Object.values(results).reduce((sum, r) => sum + r.count, 0);
+
+      return object({
+        query,
+        total_products: totalProducts,
+        stores_searched: stores.length,
+        results,
+        searched_at: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      return error(`Failed to search grocery products: ${err.message}`);
+    }
+  }
+);
+
+server.tool(
+  {
+    name: "get-product-details",
+    description:
+      "Get detailed information about a specific grocery product including nutrition facts, ingredients, allergens, and full description. Requires the product URL from search-grocery-products results.",
+    schema: z.object({
+      url: z.string().url().describe("Full URL of the product page (from search results)"),
+      store_id: z
+        .enum(["traderjoes", "safeway", "target"])
+        .optional()
+        .describe("Store identifier (auto-detected from URL if not provided)"),
+    }),
+  },
+  async ({ url, store_id }) => {
+    try {
+      const storeId = (store_id as StoreId | undefined) ?? detectStoreFromUrl(url);
+      if (!storeId) {
+        return error("Could not detect store from URL. Please provide store_id.");
+      }
+
+      const result = await getProductDetails(url, storeId);
+      if (!result) {
+        return error(
+          "Could not extract product data. The page may have changed or the product may be unavailable."
+        );
+      }
+
+      return object({
+        success: true,
+        store: result.store,
+        store_id: result.store_id,
+        product: result.product,
+        scraped_at: new Date().toISOString(),
+        source_url: url,
+      });
+    } catch (err: any) {
+      return error(`Failed to get product details: ${err.message}`);
     }
   }
 );

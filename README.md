@@ -84,20 +84,25 @@ The main cart optimization server that compares grocery options.
 - `search-catalog` - Search product catalog
 - `fetch-catalog-entry` - Get detailed product metadata
 
-### Trader Joe's Scraper
-Web scraper for Trader Joe's products using Firecrawl.
+### Multi-Store Grocery Scraper
+Web scraper for multiple grocery stores (Trader Joe's, Safeway, Target) using Firecrawl.
 
-**Port:** 3001  
-**Location:** `src/mcp-servers/traderjoes/`  
+**Location:** `src/mcp-servers/grocery-scraper/`  
 **Tools:**
-- `search-traderjoes-products` - Search for products by name/category
-- `scrape-traderjoes-product` - Get detailed product info from URL
-- `scrape-traderjoes-category` - Scrape all products from a category page
+- `search-grocery-products` - Search products across multiple stores (returns top 5 from each)
+- `get-product-details` - Get detailed product info including nutrition, ingredients, and allergens
 
 **Environment Variables:**
 ```bash
 FIRECRAWL_API_KEY=your_api_key_here
 ```
+
+**Features:**
+- 🏪 Search across Trader Joe's, Safeway, and Target simultaneously
+- 📊 Compare prices and products across stores
+- 🔍 Get superficial info (name, price, image) for quick comparison
+- 📋 Get detailed info (nutrition facts, ingredients, allergens) when needed
+- ⚡ Parallel searches for optimal performance
 
 **Testing:**
 ```bash
@@ -105,8 +110,29 @@ FIRECRAWL_API_KEY=your_api_key_here
 npm run build
 
 # Run the test client
-npm run traderjoes:test
+npm run grocery:test
 ```
+
+**Example Usage:**
+
+Search across all stores:
+```json
+{
+  "tool": "search-grocery-products",
+  "query": "almond milk",
+  "stores": ["traderjoes", "safeway", "target"]
+}
+```
+
+Get detailed product info:
+```json
+{
+  "tool": "get-product-details",
+  "url": "https://www.traderjoes.com/home/products/pdp/..."
+}
+```
+
+See `src/mcp-servers/grocery-scraper/USAGE_EXAMPLES.md` for more examples.
 
 ### Running Multiple Servers
 
@@ -116,8 +142,8 @@ Both servers are configured in `mcp.json` and can be run simultaneously:
 # Terminal 1 - Main CartQuant server
 npm run dev
 
-# Terminal 2 - Trader Joe's scraper (after building)
-npm run traderjoes:start
+# Terminal 2 - Grocery scraper (after building)
+npm run grocery:start
 ```
 
 ## 6) Replace mocks with real APIs

@@ -18,11 +18,13 @@
     "dev": "mcp-use dev",
     "start": "mcp-use start",
     "deploy": "mcp-use deploy",
-    "traderjoes:start": "node dist/src/mcp-servers/traderjoes/server.js",
-    "traderjoes:test": "npx tsx src/mcp-servers/traderjoes/tests/test-client.ts"
+    "grocery:start": "node dist/src/mcp-servers/grocery-scraper/server.js",
+    "grocery:test": "npx tsx src/mcp-servers/grocery-scraper/tests/test-client.ts",
+    "traderjoes:start": "npm run grocery:start",
+    "traderjoes:test": "npm run grocery:test"
   },
   "dependencies": {
-    "@mendable/firecrawl-js": "^4.13.0",
+    "@mendable/firecrawl-js": "^1.0.0",
     "@openai/apps-sdk-ui": "^0.2.1",
     "@tanstack/react-query": "^5.90.21",
     "cors": "^2.8.6",

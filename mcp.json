@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cartquant": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "PORT": "3000",
+        "MCP_URL": "http://localhost:3000"
+      }
+    }
+  }
+}

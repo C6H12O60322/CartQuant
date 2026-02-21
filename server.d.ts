@@ -91,18 +91,33 @@ export interface PredictionInfo {
   recommendation: string;
 }
 
-export interface BasketItem {
-  query: string;
+export interface ItemAlternative {
   product: SelectedProduct;
   health: HealthInfo;
   prediction: PredictionInfo;
 }
 
-export interface CompareBasketResponse {
-  mode: BasketMode;
+export interface BasketItemWithAlts {
+  query: string;
+  alternatives: ItemAlternative[];
+}
+
+export interface StoreAssignment {
+  store: string;
+  items: string[];
+  subtotalUsd: number;
+}
+
+export interface BasketPlan {
+  summary: string;
   totalUsd: number;
   totalPrediction: PredictionInfo;
-  recommendation: string;
+  storeBreakdown: StoreAssignment[];
   savings: string;
-  items: BasketItem[];
+}
+
+export interface CompareBasketResponse {
+  mode: BasketMode;
+  plan: BasketPlan;
+  items: BasketItemWithAlts[];
 }

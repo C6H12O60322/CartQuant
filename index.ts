@@ -175,7 +175,7 @@ server.tool(
         response,
       },
       output: text(
-        `Compared ${response.items.length} items in ${mode} mode. Total: $${response.totalUsd.toFixed(2)}. ${response.recommendation}`
+        `Compared ${response.items.length} items in ${mode} mode. Total: $${response.plan.totalUsd.toFixed(2)}. ${response.plan.summary}`
       ),
     });
   }

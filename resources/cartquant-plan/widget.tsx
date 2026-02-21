@@ -1,6 +1,6 @@
 import "./widget.css";
 import { McpUseProvider, useWidget, type WidgetMetadata } from "mcp-use/react";
-import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   compareBasketWidgetPropsSchema,
   type CompareBasketResponse,
@@ -67,6 +67,100 @@ interface WidgetState {
   loading: boolean;
   error: string | null;
   minimizeStops: boolean;
+}
+
+type CompareBasketToolInput = {
+  items?: string[];
+  avoid?: string[];
+  mode?: Mode;
+};
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function getModeValue(value: unknown): Mode {
+  return value === "cheapest" || value === "cleanest" || value === "balanced"
+    ? value
+    : "balanced";
+}
+
+function normalizeToolInput(value: unknown): Required<CompareBasketToolInput> {
+  if (!value || typeof value !== "object") {
+    return {
+      items: [...DEMO_ITEMS],
+      avoid: [],
+      mode: "balanced",
+    };
+  }
+
+  const input = value as CompareBasketToolInput;
+  const items = toStringArray(input.items);
+  return {
+    items: items.length > 0 ? items : [...DEMO_ITEMS],
+    avoid: toStringArray(input.avoid),
+    mode: getModeValue(input.mode),
+  };
+}
+
+function buildCacheKey(mode: Mode, items: string[], avoid: string[]): string {
+  return `${mode}::${items.join("|")}::${avoid.join("|")}`;
+}
+
+function extractCompareBasketResponse(result: unknown): CompareBasketResponse | null {
+  if (!result || typeof result !== "object") {
+    return null;
+  }
+
+  const outer = result as Record<string, unknown>;
+  const structured = outer.structuredContent;
+  if (!structured || typeof structured !== "object") {
+    return null;
+  }
+
+  const response = (structured as Record<string, unknown>).response;
+  if (!response || typeof response !== "object") {
+    return null;
+  }
+
+  const typedResponse = response as CompareBasketResponse;
+  if (!Array.isArray(typedResponse.items) || !typedResponse.plan) {
+    return null;
+  }
+
+  return typedResponse;
+}
+
+function buildMockFallbackForItems(mode: Mode, items: string[]): CompareBasketResponse {
+  const base = getMockBasketResponse(mode);
+  if (items.length === 0) {
+    return base;
+  }
+
+  const byQuery = new Map(base.items.map((entry) => [entry.query.toLowerCase(), entry]));
+  const picked = items
+    .map((query) => byQuery.get(query.toLowerCase()))
+    .filter((entry): entry is BasketItemWithAlts => Boolean(entry))
+    .map((entry) => ({
+      query: entry.query,
+      alternatives: [...entry.alternatives],
+    }));
+
+  if (picked.length === 0) {
+    return base;
+  }
+
+  return {
+    ...base,
+    items: picked,
+  };
 }
 
 // ─── Basket Plan Computation ───
@@ -732,15 +826,27 @@ function ErrorBanner({
 // ─── Main Widget ───
 
 const CartQuantWidget: React.FC = () => {
-  const widgetData = useWidget<CompareBasketWidgetProps>();
+  const widgetData = useWidget<
+    CompareBasketWidgetProps,
+    Record<string, unknown>,
+    Record<string, unknown>,
+    Record<string, unknown>,
+    CompareBasketToolInput
+  >();
+
+  const initialToolInput = normalizeToolInput(widgetData.toolInput);
 
   const [state, setState] = useState<WidgetState>(() => {
     const initial = widgetData.props?.response ?? null;
-    const firstItem = initial?.items[0]?.query ?? DEMO_ITEMS[0];
+    const initialItems =
+      initial?.items.map((entry) => entry.query) ?? initialToolInput.items;
+    const initialMode = initial?.mode ?? initialToolInput.mode;
+    const firstItem = initialItems[0] ?? DEMO_ITEMS[0];
+
     return {
-      items: initial ? initial.items.map((i) => i.query) : [],
-      avoid: [],
-      mode: initial?.mode ?? "balanced",
+      items: initialItems,
+      avoid: initialToolInput.avoid,
+      mode: initialMode,
       selectedItemQuery: firstItem,
       selectedAltId: null,
       activeStoreId: null,
@@ -752,51 +858,99 @@ const CartQuantWidget: React.FC = () => {
     };
   });
 
-  const cache = useRef<Partial<Record<Mode, CompareBasketResponse>>>({});
+  const cache = useRef<Record<string, CompareBasketResponse>>({});
 
-  if (state.results && !cache.current[state.results.mode]) {
-    cache.current[state.results.mode] = state.results;
+  if (state.results) {
+    const key = buildCacheKey(state.results.mode, state.items, state.avoid);
+    if (!cache.current[key]) {
+      cache.current[key] = state.results;
+    }
   }
 
-  const fetchResults = useCallback((mode: Mode) => {
-    if (cache.current[mode]) {
-      const cached = cache.current[mode]!;
+  const fetchResults = useCallback(
+    async (
+      mode: Mode,
+      overrides?: {
+        items?: string[];
+        avoid?: string[];
+      }
+    ) => {
+      const items = overrides?.items ?? state.items;
+      const avoid = overrides?.avoid ?? state.avoid;
+      const cacheKey = buildCacheKey(mode, items, avoid);
+      const cached = cache.current[cacheKey];
+
+      if (cached) {
+        setState((s) => ({
+          ...s,
+          mode,
+          items: [...items],
+          avoid: [...avoid],
+          results: cached,
+          loading: false,
+          error: null,
+          selectedItemQuery: cached.items[0]?.query ?? s.selectedItemQuery,
+          selectedAltId: null,
+          activeStoreId: null,
+        }));
+        return;
+      }
+
       setState((s) => ({
         ...s,
         mode,
-        results: cached,
-        loading: false,
+        items: [...items],
+        avoid: [...avoid],
+        loading: true,
         error: null,
-        selectedItemQuery: cached.items[0]?.query ?? s.selectedItemQuery,
         selectedAltId: null,
         activeStoreId: null,
       }));
-      return;
-    }
 
-    setState((s) => ({ ...s, mode, loading: true, error: null }));
-
-    setTimeout(() => {
       try {
-        const data = getMockBasketResponse(mode);
-        cache.current[mode] = data;
+        const toolResult = await widgetData.callTool("compare-basket", {
+          items,
+          mode,
+          ...(avoid.length > 0 ? { avoid } : {}),
+        });
+
+        const response = extractCompareBasketResponse(toolResult);
+        if (!response) {
+          throw new Error("Missing structured response from compare-basket tool.");
+        }
+
+        cache.current[cacheKey] = response;
         setState((s) => ({
           ...s,
-          results: data,
+          mode,
+          items: response.items.map((entry) => entry.query),
+          avoid: [...avoid],
+          results: response,
           loading: false,
-          selectedItemQuery: data.items[0]?.query ?? s.selectedItemQuery,
+          error: null,
+          selectedItemQuery: response.items[0]?.query ?? s.selectedItemQuery,
           selectedAltId: null,
           activeStoreId: null,
         }));
       } catch {
+        const fallback = buildMockFallbackForItems(mode, items);
+        cache.current[cacheKey] = fallback;
         setState((s) => ({
           ...s,
+          mode,
+          items: fallback.items.map((entry) => entry.query),
+          avoid: [...avoid],
+          results: fallback,
           loading: false,
-          error: "Failed to fetch basket comparison. Please try again.",
+          error: "Live compare tool failed, showing fallback data.",
+          selectedItemQuery: fallback.items[0]?.query ?? s.selectedItemQuery,
+          selectedAltId: null,
+          activeStoreId: null,
         }));
       }
-    }, 600);
-  }, []);
+    },
+    [state.items, state.avoid, widgetData.callTool]
+  );
 
   const handleRun = useCallback(() => {
     cache.current = {};
@@ -810,34 +964,8 @@ const CartQuantWidget: React.FC = () => {
 
   const handleLoadDemo = useCallback(() => {
     cache.current = {};
-    setState((s) => ({
-      ...s,
-      items: [...DEMO_ITEMS],
-      avoid: [],
-      loading: true,
-      error: null,
-    }));
-    setTimeout(() => {
-      try {
-        const data = getMockBasketResponse(state.mode);
-        cache.current[state.mode] = data;
-        setState((s) => ({
-          ...s,
-          results: data,
-          loading: false,
-          selectedItemQuery: data.items[0]?.query ?? s.selectedItemQuery,
-          selectedAltId: null,
-          activeStoreId: null,
-        }));
-      } catch {
-        setState((s) => ({
-          ...s,
-          loading: false,
-          error: "Failed to load demo data.",
-        }));
-      }
-    }, 600);
-  }, [state.mode]);
+    fetchResults(state.mode, { items: [...DEMO_ITEMS], avoid: [] });
+  }, [fetchResults, state.mode]);
 
   const handleAddAvoid = useCallback((flag: string) => {
     setState((s) => {
@@ -907,7 +1035,7 @@ const CartQuantWidget: React.FC = () => {
       : computePlanBestPerItem(state.results.items, state.mode);
   }, [state.results, state.mode, state.minimizeStops]);
 
-  const itemList = state.results?.items.map((i) => i.query) ?? DEMO_ITEMS;
+  const itemList = state.results?.items.map((i) => i.query) ?? state.items;
 
   // ─── Render ───
 

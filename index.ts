@@ -1,6 +1,7 @@
 import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { buildCartOptions, getResultById, searchCatalog } from "./src/mock-data.js";
+import { buildCompareBasketResponse } from "./src/services/compare-basket.js";
 import type { BasketMode, CartPlanInput } from "./server";
 
 const server = new MCPServer({
@@ -9,6 +10,7 @@ const server = new MCPServer({
   version: "0.1.0",
   description:
     "Cart optimization MCP app that compares grocery options using API-first data with scrape fallback",
+  stateless: true,
   baseUrl: process.env.MCP_URL || "http://localhost:3000",
   websiteUrl: "https://manufact.com",
   icons: [
@@ -164,18 +166,20 @@ server.tool(
   },
   async (input) => {
     const mode = (input.mode || "balanced") as BasketMode;
-    // Dynamic import to work with the resource mock data
-    const { getMockBasketResponse } = await import(
-      "./resources/cartquant-plan/mock-data.js"
-    );
-    const response = getMockBasketResponse(mode);
+    const response = await buildCompareBasketResponse({
+      items: input.items,
+      avoid: input.avoid ?? [],
+      mode,
+    });
 
     return widget({
       props: {
         response,
       },
       output: text(
-        `Compared ${response.items.length} items in ${mode} mode. Total: $${response.plan.totalUsd.toFixed(2)}. ${response.plan.summary}`
+        `Compared ${response.items.length} items in ${mode} mode. Total: $${response.plan.totalUsd.toFixed(
+          2
+        )}. ${response.plan.summary}`
       ),
     });
   }

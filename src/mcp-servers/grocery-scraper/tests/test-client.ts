@@ -59,11 +59,11 @@ function parseStructuredContent(result: any) {
 async function testMultiStoreSearch() {
   console.log("🧪 TEST 1: Multi-Store Search");
   console.log("=".repeat(70));
-  console.log("Searching for 'almond milk' across all 3 stores...\n");
+  console.log("Searching for 'almond milk' across 5 stores...\n");
   
   const result = await callMCPTool("search-grocery-products", {
     query: "almond milk",
-    stores: ["traderjoes", "safeway", "target"]
+    stores: ["traderjoes", "target", "wholefoods", "kroger", "costco"]
   });
   
   const data = parseStructuredContent(result);
@@ -98,13 +98,13 @@ async function testMultiStoreSearch() {
 
 async function testSpecificStoreSearch() {
   console.log("\n\n" + "=".repeat(70));
-  console.log("🧪 TEST 2: Specific Store Search - Organic Pasta (TJ's & Safeway)");
+  console.log("🧪 TEST 2: Specific Store Search - Organic Pasta (TJ's, Whole Foods, Costco)");
   console.log("=".repeat(70));
-  console.log("Searching for 'organic pasta' in 2 stores...\n");
+  console.log("Searching for 'organic pasta' in 3 stores...\n");
   
   const result = await callMCPTool("search-grocery-products", {
     query: "organic pasta",
-    stores: ["traderjoes", "safeway"]
+    stores: ["traderjoes", "wholefoods", "costco"]
   });
   
   const data = parseStructuredContent(result);

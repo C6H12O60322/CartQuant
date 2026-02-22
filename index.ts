@@ -235,7 +235,7 @@ const findStoresSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      "Store chains to search for (defaults to Trader Joe's, Whole Foods, Safeway, Kroger, Target)"
+      "Store chains to search for (defaults to Trader Joe's, Whole Foods, Kroger, Costco, Target)"
     ),
   radiusMeters: z
     .number()
@@ -295,16 +295,16 @@ server.tool(
   {
     name: "search-grocery-products",
     description:
-      "Search for grocery products across Trader Joe's, Safeway, and Target. Returns the top results from each store with product name, price, image URL, description, and link.",
+      "Search for grocery products across Trader Joe's, Target, Whole Foods, Kroger, and Costco. Returns the top results from each store with product name, price, image URL, description, and link.",
     schema: z.object({
       query: z
         .string()
         .describe("Product name or category to search for (e.g., 'organic pasta', 'almond milk')"),
       stores: z
-        .array(z.enum(["traderjoes", "safeway", "target"]))
+        .array(z.enum(["traderjoes", "target", "wholefoods", "kroger", "costco"]))
         .optional()
-        .default(["traderjoes", "target"])
-        .describe("Which stores to search in (default: Trader Joe's and Target). Safeway available but slow."),
+        .default(["traderjoes", "target", "wholefoods", "kroger", "costco"])
+        .describe("Which stores to search in (default: Trader Joe's, Target, Whole Foods, Kroger, Costco)."),
       limit: z
         .number()
         .int()
@@ -342,7 +342,7 @@ server.tool(
     schema: z.object({
       url: z.string().url().describe("Full URL of the product page (from search results)"),
       store_id: z
-        .enum(["traderjoes", "safeway", "target"])
+        .enum(["traderjoes", "target", "wholefoods", "kroger", "costco"])
         .optional()
         .describe("Store identifier (auto-detected from URL if not provided)"),
     }),

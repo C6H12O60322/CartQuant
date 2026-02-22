@@ -73,7 +73,11 @@ async function testScraperDirect() {
   console.log(DIVIDER);
   console.log(`  Firecrawl configured: ${isScraperConfigured()}\n`);
 
-  const results = await searchAllStores("almond milk", ["traderjoes", "safeway", "target"], 2);
+  const results = await searchAllStores(
+    "almond milk",
+    ["traderjoes", "target", "wholefoods", "kroger", "costco"],
+    2
+  );
 
   for (const [storeId, result] of Object.entries(results)) {
     console.log(`  ${result.store_name} (${storeId}): ${result.count} products`);

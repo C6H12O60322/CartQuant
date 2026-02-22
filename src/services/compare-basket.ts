@@ -1,6 +1,7 @@
 import "dotenv/config";
 import {
   searchAllStores,
+  getProductDetails,
   isScraperConfigured,
   getStoreName,
   getAllStoreIds,
@@ -11,7 +12,6 @@ import {
 import {
   DEMO_ITEMS,
   generateAltId,
-  getMockBasketResponse,
 } from "../../resources/cartquant-plan/mock-data.js";
 import type {
   BasketItemWithAlts,
@@ -78,12 +78,26 @@ function parsePriceUsd(rawPrice: string | undefined, fallback: number): number {
   return roundCurrency(parsed);
 }
 
+function normalizeIngredients(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 /**
  * Estimate a health score from scraped product data.
  * Uses keyword heuristics since search results don't include nutrition info.
  */
 function estimateHealthScore(product: ScrapedProduct): number {
-  const text = [product.name, product.description, product.brand, product.category]
+  const text = [
+    product.name,
+    product.description,
+    product.brand,
+    product.category,
+    ...(product.ingredients ?? []),
+  ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -102,6 +116,33 @@ function estimateHealthScore(product: ScrapedProduct): number {
   if (text.includes("processed")) score -= 5;
 
   return clamp(score, 30, 98);
+}
+
+async function enrichScrapedProductDetails(
+  product: ScrapedProduct
+): Promise<ScrapedProduct> {
+  if (!product.url) {
+    return product;
+  }
+
+  try {
+    const details = await getProductDetails(product.url, product.store_id);
+    if (!details?.product) {
+      return product;
+    }
+
+    return {
+      ...product,
+      name: details.product.name?.trim() || product.name,
+      price: details.product.price?.trim() || product.price,
+      description: details.product.description?.trim() || product.description,
+      brand: details.product.brand?.trim() || product.brand,
+      image_url: details.product.image_url || product.image_url,
+      ingredients: normalizeIngredients(details.product.ingredients),
+    };
+  } catch {
+    return product;
+  }
 }
 
 /**
@@ -142,7 +183,7 @@ function scrapedToAlternative(
       confidence: 55,
       recommendation: "Live price captured. Trend requires historical data.",
     },
-    ingredients: [],
+    ingredients: product.ingredients ?? [],
   };
 }
 
@@ -163,6 +204,9 @@ function buildSyntheticAlternatives(query: string): ItemAlternative[] {
   }> = [
     { storeId: "traderjoes", priceFactor: 1.0, qualityOffset: 9, predictionShift: 0.4 },
     { storeId: "target", priceFactor: 0.96, qualityOffset: -1, predictionShift: 0.8 },
+    { storeId: "wholefoods", priceFactor: 1.22, qualityOffset: 12, predictionShift: 0.2 },
+    { storeId: "kroger", priceFactor: 0.9, qualityOffset: -4, predictionShift: 1.5 },
+    { storeId: "costco", priceFactor: 0.88, qualityOffset: 2, predictionShift: 0.6 },
   ];
 
   return candidates.map((c) => {
@@ -271,7 +315,8 @@ async function buildAlternativesForItem(
     const topProduct = result?.products?.[0];
 
     if (topProduct && topProduct.name) {
-      alternatives.push(scrapedToAlternative(topProduct, query));
+      const enrichedProduct = await enrichScrapedProductDetails(topProduct);
+      alternatives.push(scrapedToAlternative(enrichedProduct, query));
     } else {
       const storeName = getStoreName(storeId);
       const seed = hashSeed(query + storeName);
@@ -385,7 +430,7 @@ function buildPlan(mode: Mode, items: BasketItemWithAlts[]): CompareBasketRespon
 
 /**
  * Main entry point: builds a compare-basket response using real scraping
- * with automatic fallback to mock data when scraping is unavailable.
+ * with automatic fallback to synthetic estimates when scraping is unavailable.
  */
 export async function buildCompareBasketResponse(
   input: BuildCompareBasketInput
@@ -397,8 +442,7 @@ export async function buildCompareBasketResponse(
   const storeIds = getAllStoreIds();
 
   if (!isScraperConfigured()) {
-    console.warn("FIRECRAWL_API_KEY not set — returning mock data as fallback.");
-    return getMockBasketResponse(mode);
+    console.warn("FIRECRAWL_API_KEY not set; using synthetic estimates for configured stores.");
   }
 
   const itemResults = await Promise.all(

@@ -1,7 +1,12 @@
 import "dotenv/config";
 import Firecrawl from "@mendable/firecrawl-js";
 
-export type StoreId = "traderjoes" | "safeway" | "target";
+export type StoreId =
+  | "traderjoes"
+  | "target"
+  | "wholefoods"
+  | "kroger"
+  | "costco";
 
 export interface ScrapedProduct {
   name: string;
@@ -11,6 +16,7 @@ export interface ScrapedProduct {
   image_url?: string;
   description?: string;
   brand?: string;
+  ingredients?: string[];
   store: string;
   store_id: StoreId;
 }
@@ -65,20 +71,35 @@ const STORES: Record<StoreId, StoreConfig> = {
     searchUrl: (q) =>
       `https://www.traderjoes.com/home/search?q=${encodeURIComponent(q)}`,
   },
-  safeway: {
-    name: "Safeway",
-    searchUrl: (q) =>
-      `https://www.safeway.com/shop/search-results.html?q=${encodeURIComponent(q)}&tab=products`,
-  },
   target: {
     name: "Target",
     searchUrl: (q) =>
       `https://www.target.com/s?searchTerm=${encodeURIComponent(q)}`,
   },
+  wholefoods: {
+    name: "Whole Foods",
+    searchUrl: (q) =>
+      `https://www.wholefoodsmarket.com/search?text=${encodeURIComponent(q)}`,
+  },
+  kroger: {
+    name: "Kroger",
+    searchUrl: (q) =>
+      `https://www.kroger.com/search?query=${encodeURIComponent(q)}`,
+  },
+  costco: {
+    name: "Costco",
+    searchUrl: (q) =>
+      `https://www.costco.com/CatalogSearch?dept=All&keyword=${encodeURIComponent(q)}`,
+  },
 };
 
-// Safeway consistently times out (heavy JS / anti-scraping), excluded for now
-const ALL_STORE_IDS: StoreId[] = ["traderjoes", "target"];
+const ALL_STORE_IDS: StoreId[] = [
+  "traderjoes",
+  "target",
+  "wholefoods",
+  "kroger",
+  "costco",
+];
 
 // Max ms to wait for a single Firecrawl scrape before giving up
 const SCRAPE_TIMEOUT_MS = 15_000;
@@ -132,8 +153,10 @@ export function getAllStoreIds(): StoreId[] {
 
 export function detectStoreFromUrl(url: string): StoreId | null {
   if (url.includes("traderjoes.com")) return "traderjoes";
-  if (url.includes("safeway.com")) return "safeway";
   if (url.includes("target.com")) return "target";
+  if (url.includes("wholefoodsmarket.com")) return "wholefoods";
+  if (url.includes("kroger.com")) return "kroger";
+  if (url.includes("costco.com")) return "costco";
   return null;
 }
 
@@ -234,7 +257,7 @@ export async function searchStore(
   }
 
   // Race the scrape against a hard timeout
-  const scrapePromise = client.scrapeUrl(store.searchUrl(query), {
+  const scrapePromise = client.v1.scrapeUrl(store.searchUrl(query), {
     formats: ["extract"],
     extract: { schema: SEARCH_EXTRACT_SCHEMA },
     timeout: SCRAPE_TIMEOUT_MS,
@@ -306,7 +329,7 @@ export async function getProductDetails(
   if (!client) return null;
 
   try {
-    const scrapeResult = await client.scrapeUrl(url, {
+    const scrapeResult = await client.v1.scrapeUrl(url, {
       formats: ["extract"],
       extract: { schema: DETAIL_EXTRACT_SCHEMA as any },
     } as any);

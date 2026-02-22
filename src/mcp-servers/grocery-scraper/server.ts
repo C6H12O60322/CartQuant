@@ -14,7 +14,7 @@ const firecrawl = new Firecrawl({
 });
 
 // Types
-type StoreId = "traderjoes" | "safeway" | "target";
+type StoreId = "traderjoes" | "target" | "wholefoods" | "kroger" | "costco";
 
 interface Product {
   name?: string;
@@ -82,14 +82,22 @@ const STORES: Record<StoreId, StoreConfig> = {
     name: "Trader Joe's",
     searchUrl: (query: string) => `https://www.traderjoes.com/home/search?q=${encodeURIComponent(query)}`,
   },
-  safeway: {
-    name: "Safeway",
-    searchUrl: (query: string) => `https://www.safeway.com/shop/search-results.html?q=${encodeURIComponent(query)}&tab=products`,
-  },
   target: {
     name: "Target",
     searchUrl: (query: string) => `https://www.target.com/s?searchTerm=${encodeURIComponent(query)}`,
-  }
+  },
+  wholefoods: {
+    name: "Whole Foods",
+    searchUrl: (query: string) => `https://www.wholefoodsmarket.com/search?text=${encodeURIComponent(query)}`,
+  },
+  kroger: {
+    name: "Kroger",
+    searchUrl: (query: string) => `https://www.kroger.com/search?query=${encodeURIComponent(query)}`,
+  },
+  costco: {
+    name: "Costco",
+    searchUrl: (query: string) => `https://www.costco.com/CatalogSearch?dept=All&keyword=${encodeURIComponent(query)}`,
+  },
 };
 
 /**
@@ -99,10 +107,14 @@ const STORES: Record<StoreId, StoreConfig> = {
 server.tool(
   {
     name: "search-grocery-products",
-    description: "Search for grocery products across Trader Joe's, Safeway, and Target. Returns the top 3 results from each store with basic product information (name, price, image, URL).",
+    description: "Search for grocery products across Trader Joe's, Target, Whole Foods, Kroger, and Costco. Returns the top 3 results from each store with basic product information (name, price, image, URL).",
     schema: z.object({
       query: z.string().describe("Product name or category to search for (e.g., 'organic pasta', 'frozen pizza', 'almond milk')"),
-      stores: z.array(z.enum(["traderjoes", "safeway", "target"])).optional().default(["traderjoes", "safeway", "target"]).describe("Which stores to search in (default: all stores)")
+      stores: z
+        .array(z.enum(["traderjoes", "target", "wholefoods", "kroger", "costco"]))
+        .optional()
+        .default(["traderjoes", "target", "wholefoods", "kroger", "costco"])
+        .describe("Which stores to search in (default: all supported stores)")
     }),
   },
   async ({ query, stores }) => {
@@ -119,7 +131,7 @@ server.tool(
           try {
             const searchUrl = store.searchUrl(query);
             
-            const scrapeResult = await firecrawl.scrapeUrl(searchUrl, {
+            const scrapeResult = await firecrawl.v1.scrapeUrl(searchUrl, {
               formats: ['extract'],
               extract: {
                 schema: {
@@ -200,7 +212,10 @@ server.tool(
     description: "Get detailed information about a specific product from any supported store. Requires the product URL obtained from search-grocery-products. Returns comprehensive details including ingredients, nutrition facts, allergens, and full description.",
     schema: z.object({
       url: z.string().url().describe("Full URL of the product page (from search-grocery-products results)"),
-      store_id: z.enum(["traderjoes", "safeway", "target"]).optional().describe("Store identifier to optimize scraping (optional, will be auto-detected from URL)")
+      store_id: z
+        .enum(["traderjoes", "target", "wholefoods", "kroger", "costco"])
+        .optional()
+        .describe("Store identifier to optimize scraping (optional, will be auto-detected from URL)")
     }),
   },
   async ({ url, store_id }) => {
@@ -208,8 +223,10 @@ server.tool(
       // Auto-detect store from URL if not provided
       if (!store_id) {
         if (url.includes('traderjoes.com')) store_id = 'traderjoes';
-        else if (url.includes('safeway.com')) store_id = 'safeway';
         else if (url.includes('target.com')) store_id = 'target';
+        else if (url.includes('wholefoodsmarket.com')) store_id = 'wholefoods';
+        else if (url.includes('kroger.com')) store_id = 'kroger';
+        else if (url.includes('costco.com')) store_id = 'costco';
         else {
           return error("Could not detect store from URL. Please provide store_id parameter.");
         }
@@ -310,7 +327,7 @@ server.tool(
         }
       };
 
-      const scrapeResult = await firecrawl.scrapeUrl(url, {
+      const scrapeResult = await firecrawl.v1.scrapeUrl(url, {
         formats: ['extract'],
         extract: {
           schema: detailedSchema as any
@@ -355,7 +372,7 @@ server.tool(
     try {
       const searchUrl = `https://www.traderjoes.com/home/search?q=${encodeURIComponent(query)}`;
       
-      const scrapeResult = await firecrawl.scrapeUrl(searchUrl, {
+      const scrapeResult = await firecrawl.v1.scrapeUrl(searchUrl, {
         formats: ['extract'],
         extract: {
           schema: {
@@ -393,7 +410,9 @@ server.tool(
   }
 );
 
-console.log("🛒 Multi-Store Grocery Scraper MCP Server starting...");
-console.log("📍 Supported stores: Trader Joe's, Safeway, Target");
+console.log("Multi-Store Grocery Scraper MCP Server starting...");
+console.log("Supported stores: Trader Joe's, Target, Whole Foods, Kroger, Costco");
 server.listen();
-console.log("✅ Server ready! Connect via MCP client.");
+console.log("Server ready! Connect via MCP client.");
+
+

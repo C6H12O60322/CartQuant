@@ -140,6 +140,7 @@ function cloneAlternative(alternative: ItemAlternative): ItemAlternative {
     prediction: {
       ...alternative.prediction,
     },
+    ingredients: [...(alternative.ingredients ?? [])],
   };
 }
 
@@ -236,6 +237,7 @@ function buildSyntheticAlternatives(query: string): ItemAlternative[] {
         confidence: 58,
         recommendation: "Estimated trend from fallback model.",
       },
+      ingredients: [],
     };
   });
 }
@@ -324,7 +326,7 @@ async function searchTraderJoesProduct(query: string): Promise<TraderJoesProduct
 
   try {
     const searchUrl = `https://www.traderjoes.com/home/search?q=${encodeURIComponent(query)}`;
-    const scrapeResult = await client.v1.scrapeUrl(searchUrl, {
+    const scrapeResult = await (client as any).v1.scrapeUrl(searchUrl, {
       formats: ["extract"],
       extract: {
         schema: traderJoesExtractSchema as any,
@@ -385,6 +387,7 @@ function buildTraderJoesAlternative(
         existing?.prediction.recommendation ??
         "Live scrape price captured. Trend estimate from fallback model.",
     },
+    ingredients: existing?.ingredients ? [...existing.ingredients] : [],
   };
 }
 

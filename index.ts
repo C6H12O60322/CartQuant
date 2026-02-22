@@ -273,7 +273,7 @@ server.tool(
       );
 
       const totalLocations = Object.values(stores).reduce(
-        (sum, locs) => sum + locs.length,
+        (sum, locs) => sum + (locs as unknown[]).length,
         0
       );
 

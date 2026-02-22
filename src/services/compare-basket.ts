@@ -142,6 +142,7 @@ function scrapedToAlternative(
       confidence: 55,
       recommendation: "Live price captured. Trend requires historical data.",
     },
+    ingredients: [],
   };
 }
 
@@ -190,6 +191,7 @@ function buildSyntheticAlternatives(query: string): ItemAlternative[] {
         confidence: 45,
         recommendation: "Estimated trend. Configure FIRECRAWL_API_KEY for live data.",
       },
+      ingredients: [],
     };
   });
 }
@@ -297,6 +299,7 @@ async function buildAlternativesForItem(
           confidence: 40,
           recommendation: "Fallback estimate. Could not retrieve live data.",
         },
+        ingredients: [],
       });
     }
   }

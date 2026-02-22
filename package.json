@@ -23,7 +23,7 @@
     "grocery:test": "npx tsx src/mcp-servers/grocery-scraper/tests/test-client.ts"
   },
   "dependencies": {
-    "@mendable/firecrawl-js": "^1.0.0",
+    "@mendable/firecrawl-js": "^1.29.3",
     "@openai/apps-sdk-ui": "^0.2.1",
     "@tanstack/react-query": "^5.90.21",
     "cors": "^2.8.6",

@@ -1,5 +1,5 @@
 import "./widget.css";
-import { McpUseProvider, useWidget, type WidgetMetadata } from "mcp-use/react";
+import { McpUseProvider, useWidget, useCallTool, type WidgetMetadata } from "mcp-use/react";
 import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   compareBasketWidgetPropsSchema,
@@ -12,6 +12,21 @@ import {
   type TrendDirection,
 } from "./types";
 import { getMockBasketResponse, DEMO_ITEMS, STORES } from "./mock-data";
+
+// ─── Store Location Types (from Google Places API) ───
+
+interface StoreLocationPin {
+  name: string;
+  placeId: string;
+  address: string;
+  lat: number;
+  lng: number;
+  rating: number | null;
+  openNow: boolean | null;
+}
+
+/** Map of store chain name → array of real locations */
+type StoreLocationsMap = Record<string, StoreLocationPin[]>;
 
 export const widgetMetadata: WidgetMetadata = {
   description:
@@ -61,6 +76,11 @@ interface WidgetState {
   error: string | null;
   activeStoreId: string | null;
   customPicks: Record<string, string>; // itemQuery -> altId
+  addingItem: boolean;
+  searchQuery: string;
+  storeLocations: StoreLocationsMap | null;
+  mapCenter: { lat: number; lng: number } | null;
+  locationsLoading: boolean;
 }
 
 // ─── Basket Plan Computation (respects customPicks) ───
@@ -184,6 +204,7 @@ function CircularScore({ score, size = 80 }: { score: number; size?: number }) {
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const SF_CENTER: [number, number] = [37.7749, -122.4194];
+const SF_CENTER_OBJ = { lat: 37.7749, lng: -122.4194 };
 const MAP_ZOOM = 13;
 
 function loadLeaflet(): Promise<void> {
@@ -236,14 +257,64 @@ function makeIcon(L: any, color: string, size: number, badge?: number): any {
   });
 }
 
+/**
+ * Flatten dynamic store locations into a simple pin array.
+ * Each pin gets a `chainName` (the search key, e.g. "Trader Joe's") so we can
+ * match it back to the basket plan's store breakdown.
+ */
+interface FlatPin {
+  key: string;       // unique key for React / marker map
+  chainName: string; // matches StoreAssignment.store
+  name: string;      // actual place name from Google
+  lat: number;
+  lng: number;
+  address: string;
+}
+
+function flattenLocations(
+  locations: StoreLocationsMap | null
+): FlatPin[] {
+  if (!locations) return [];
+  const pins: FlatPin[] = [];
+  for (const [chainName, locs] of Object.entries(locations)) {
+    for (const loc of locs) {
+      pins.push({
+        key: loc.placeId || `${chainName}:${loc.lat}:${loc.lng}`,
+        chainName,
+        name: loc.name,
+        lat: loc.lat,
+        lng: loc.lng,
+        address: loc.address,
+      });
+    }
+  }
+  return pins;
+}
+
+/** Build FlatPin array from the hardcoded STORES fallback */
+function fallbackPins(): FlatPin[] {
+  return STORES.map((s) => ({
+    key: `fallback:${s.name}`,
+    chainName: s.name,
+    name: s.name,
+    lat: s.lat,
+    lng: s.lng,
+    address: "",
+  }));
+}
+
 function MapPanel({
   storeBreakdown,
   activeStoreId,
   onStoreClick,
+  storeLocations,
+  mapCenter,
 }: {
   storeBreakdown: StoreAssignment[];
   activeStoreId: string | null;
   onStoreClick: (storeName: string) => void;
+  storeLocations: StoreLocationsMap | null;
+  mapCenter: { lat: number; lng: number } | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -253,13 +324,25 @@ function MapPanel({
 
   onStoreClickRef.current = onStoreClick;
 
+  // Resolve pins: use dynamic locations if available, else fallback
+  const pins = useMemo(
+    () => {
+      const dynamic = flattenLocations(storeLocations);
+      return dynamic.length > 0 ? dynamic : fallbackPins();
+    },
+    [storeLocations]
+  );
+
+  const center = mapCenter ?? SF_CENTER_OBJ;
+
+  // Initialize map
   useEffect(() => {
     let cancelled = false;
     loadLeaflet().then(() => {
       if (cancelled || !containerRef.current || mapRef.current) return;
       const L = (window as any).L;
       const map = L.map(containerRef.current, {
-        center: SF_CENTER,
+        center: [center.lat, center.lng],
         zoom: MAP_ZOOM,
         zoomControl: true,
         attributionControl: false,
@@ -274,16 +357,6 @@ function MapPanel({
         }
       ).addTo(map);
 
-      for (const store of STORES) {
-        const marker = L.marker([store.lat, store.lng], {
-          icon: makeIcon(L, "#9ca3af", 28),
-          title: store.name,
-        }).addTo(map);
-        marker.bindTooltip(store.name, { direction: "top", offset: [0, -24] });
-        marker.on("click", () => onStoreClickRef.current(store.name));
-        markersRef.current.set(store.name, marker);
-      }
-
       mapRef.current = map;
       setTimeout(() => map.invalidateSize(), 100);
       setReady(true);
@@ -293,44 +366,76 @@ function MapPanel({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Recenter map when center changes
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    mapRef.current.setView([center.lat, center.lng], MAP_ZOOM, {
+      animate: true,
+      duration: 0.4,
+    });
+  }, [center.lat, center.lng, ready]);
+
+  // Sync markers when pins or breakdown change
   useEffect(() => {
     if (!ready) return;
     const L = (window as any).L;
-    if (!L) return;
-    const assignedStores = new Set(storeBreakdown.map((s) => s.store));
+    if (!L || !mapRef.current) return;
 
-    for (const store of STORES) {
-      const marker = markersRef.current.get(store.name);
-      if (!marker) continue;
-      const isActive = store.name === activeStoreId;
-      const isInPlan = assignedStores.has(store.name);
-      const assigned = storeBreakdown.find((s) => s.store === store.name);
+    const assignedStores = new Set(storeBreakdown.map((s) => s.store));
+    const currentKeys = new Set(pins.map((p) => p.key));
+
+    // Remove markers no longer in pins
+    for (const [key, marker] of markersRef.current.entries()) {
+      if (!currentKeys.has(key)) {
+        mapRef.current.removeLayer(marker);
+        markersRef.current.delete(key);
+      }
+    }
+
+    // Add or update markers
+    for (const pin of pins) {
+      const isActive = pin.chainName === activeStoreId;
+      const isInPlan = assignedStores.has(pin.chainName);
+      const assigned = storeBreakdown.find((s) => s.store === pin.chainName);
 
       const color = isActive ? "#4f46e5" : isInPlan ? "#2563eb" : "#9ca3af";
       const size = isActive ? 36 : 28;
       const badge = isInPlan && assigned ? assigned.items.length : undefined;
+
+      let marker = markersRef.current.get(pin.key);
+      if (!marker) {
+        marker = L.marker([pin.lat, pin.lng], {
+          icon: makeIcon(L, color, size, badge),
+          title: pin.name,
+        }).addTo(mapRef.current);
+        marker.on("click", () => onStoreClickRef.current(pin.chainName));
+        markersRef.current.set(pin.key, marker);
+      } else {
+        marker.setLatLng([pin.lat, pin.lng]);
+      }
+
       marker.setIcon(makeIcon(L, color, size, badge));
 
       const label =
         isInPlan && assigned
-          ? `<b>${store.name}</b><br/>${assigned.items.length} item${assigned.items.length > 1 ? "s" : ""} · ${formatUsd(assigned.subtotalUsd)}`
-          : store.name;
-      marker.setTooltipContent(label);
+          ? `<b>${pin.name}</b><br/>${pin.address ? pin.address + "<br/>" : ""}${assigned.items.length} item${assigned.items.length > 1 ? "s" : ""} · ${formatUsd(assigned.subtotalUsd)}`
+          : `<b>${pin.name}</b>${pin.address ? "<br/>" + pin.address : ""}`;
+      marker.bindTooltip(label, { direction: "top", offset: [0, -24] });
 
-      if (isActive) marker.setZIndexOffset(1000);
-      else marker.setZIndexOffset(0);
+      marker.setZIndexOffset(isActive ? 1000 : 0);
     }
 
+    // Pan to active store
     if (activeStoreId && mapRef.current) {
-      const activeStore = STORES.find((s) => s.name === activeStoreId);
-      if (activeStore) {
-        mapRef.current.panTo([activeStore.lat, activeStore.lng], {
+      const activePin = pins.find((p) => p.chainName === activeStoreId);
+      if (activePin) {
+        mapRef.current.panTo([activePin.lat, activePin.lng], {
           animate: true,
           duration: 0.4,
         });
       }
     }
-  }, [storeBreakdown, activeStoreId, ready]);
+  }, [pins, storeBreakdown, activeStoreId, ready]);
 
   return (
     <div
@@ -475,6 +580,201 @@ function BasketPlanHero({ plan }: { plan: BasketPlan }) {
       </div>
 
       <div style={{ fontSize: 13, color: "#4F46E5", fontWeight: 500 }}>{plan.savings}</div>
+    </div>
+  );
+}
+
+// ─── Add Item Bar ───
+
+const SUGGESTED_PRODUCTS = [
+  "rice", "butter", "orange juice", "avocado", "bananas", "cheese",
+  "pasta", "tomatoes", "apples", "salmon", "bacon", "coffee",
+  "peanut butter", "oatmeal", "spinach", "potatoes", "onions", "garlic",
+];
+
+function AddItemBar({
+  isOpen,
+  searchQuery,
+  existingItems,
+  onToggle,
+  onSearchChange,
+  onAddItem,
+}: {
+  isOpen: boolean;
+  searchQuery: string;
+  existingItems: string[];
+  onToggle: () => void;
+  onSearchChange: (q: string) => void;
+  onAddItem: (name: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus();
+  }, [isOpen]);
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          width: "100%",
+          padding: "10px 0",
+          background: "#fff",
+          border: "2px dashed #CBD5E1",
+          borderRadius: 12,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          transition: "all 0.2s ease",
+          color: "#64748B",
+          fontSize: 14,
+          fontWeight: 500,
+        }}
+        onMouseEnter={(e) => {
+          const el = e.currentTarget;
+          el.style.borderColor = "#4F46E5";
+          el.style.color = "#4F46E5";
+          el.style.background = "#FAFAFE";
+        }}
+        onMouseLeave={(e) => {
+          const el = e.currentTarget;
+          el.style.borderColor = "#CBD5E1";
+          el.style.color = "#64748B";
+          el.style.background = "#fff";
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            background: "#EEF2FF",
+            color: "#4F46E5",
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: 1,
+          }}
+        >
+          +
+        </span>
+        Add item to basket
+      </button>
+    );
+  }
+
+  const q = searchQuery.toLowerCase().trim();
+  const suggestions = q
+    ? SUGGESTED_PRODUCTS.filter(
+        (p) => p.includes(q) && !existingItems.includes(p)
+      ).slice(0, 5)
+    : [];
+  // Allow typed entry if >= 2 chars and not already in basket
+  if (q.length >= 2 && !existingItems.includes(q) && !suggestions.includes(q)) {
+    suggestions.unshift(q);
+  }
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 12,
+        padding: "12px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+        border: "1px solid #E2E8F0",
+        animation: "fadeIn 0.2s ease",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ color: "#94A3B8", fontSize: 16, flexShrink: 0 }}>
+          &#128269;
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onToggle();
+            if (e.key === "Enter" && q) onAddItem(q);
+          }}
+          placeholder="Search for a product (e.g. rice, butter, orange juice...)"
+          style={{
+            flex: 1,
+            border: "none",
+            outline: "none",
+            fontSize: 14,
+            color: "#0F172A",
+            background: "transparent",
+            padding: "4px 0",
+          }}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "#94A3B8",
+            fontSize: 18,
+            padding: "0 4px",
+            lineHeight: 1,
+            flexShrink: 0,
+          }}
+        >
+          &times;
+        </button>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div
+          style={{
+            marginTop: 8,
+            borderTop: "1px solid #F1F5F9",
+            paddingTop: 6,
+          }}
+        >
+          {suggestions.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onAddItem(name)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "8px 4px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 13,
+                color: "#334155",
+                borderRadius: 8,
+                transition: "background 0.1s ease",
+                textAlign: "left",
+                textTransform: "capitalize",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "#F8FAFC";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "none";
+              }}
+            >
+              <span style={{ color: "#4F46E5", fontSize: 14 }}>+</span>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -886,8 +1186,79 @@ const CartQuantWidget: React.FC = () => {
       error: null,
       activeStoreId: null,
       customPicks: {},
+      addingItem: false,
+      searchQuery: "",
+      storeLocations: null,
+      mapCenter: null,
+      locationsLoading: false,
     };
   });
+
+  // ─── MCP Tool Hooks for real store locations ───
+  const geocodeTool = useCallTool<
+    { address: string },
+    { structuredContent: { lat: number; lng: number; formattedAddress: string } }
+  >("geocode-location");
+
+  const findStoresTool = useCallTool<
+    { lat: number; lng: number; storeNames?: string[]; radiusMeters?: number; maxPerStore?: number },
+    { structuredContent: { stores: StoreLocationsMap; totalLocations: number } }
+  >("find-stores-nearby");
+
+  // Fetch real store locations for a given zip/address
+  const fetchStoreLocations = useCallback(
+    async (address: string) => {
+      setState((s) => ({ ...s, locationsLoading: true }));
+      try {
+        // Step 1: Geocode the address
+        const geoResult = await geocodeTool.callToolAsync({ address });
+        const center = {
+          lat: geoResult.structuredContent.lat,
+          lng: geoResult.structuredContent.lng,
+        };
+
+        // Step 2: Find stores near that location
+        // Extract unique store names from current results, or use defaults
+        const storeNames = state.results
+          ? [...new Set(
+              state.results.items.flatMap((item) =>
+                item.alternatives.map((alt) => alt.product.store)
+              )
+            )]
+          : undefined;
+
+        const storesResult = await findStoresTool.callToolAsync({
+          lat: center.lat,
+          lng: center.lng,
+          storeNames,
+          radiusMeters: 8000,
+          maxPerStore: 3,
+        });
+
+        setState((s) => ({
+          ...s,
+          mapCenter: center,
+          storeLocations: storesResult.structuredContent.stores,
+          locationsLoading: false,
+        }));
+      } catch (err) {
+        // Silently fall back to hardcoded STORES — map still works
+        console.warn("Failed to fetch real store locations, using fallback:", err);
+        setState((s) => ({ ...s, locationsLoading: false }));
+      }
+    },
+    [geocodeTool, findStoresTool, state.results]
+  );
+
+  // Auto-fetch store locations when results first load
+  const locationsFetchedRef = useRef(false);
+  useEffect(() => {
+    if (state.results && !state.storeLocations && !state.locationsLoading && !locationsFetchedRef.current) {
+      locationsFetchedRef.current = true;
+      // Default to SF zip — in production this would come from user input
+      fetchStoreLocations("94110");
+    }
+  }, [state.results, state.storeLocations, state.locationsLoading, fetchStoreLocations]);
 
   const fetchResults = useCallback(() => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -1107,6 +1478,31 @@ const CartQuantWidget: React.FC = () => {
                 {/* Basket Plan Hero */}
                 {basketPlan && <BasketPlanHero plan={basketPlan} />}
 
+                {/* Add Item Button / Search Bar */}
+                <AddItemBar
+                  isOpen={state.addingItem}
+                  searchQuery={state.searchQuery}
+                  existingItems={state.results?.items.map((i) => i.query) ?? []}
+                  onToggle={() =>
+                    setState((s) => ({
+                      ...s,
+                      addingItem: !s.addingItem,
+                      searchQuery: "",
+                    }))
+                  }
+                  onSearchChange={(q) =>
+                    setState((s) => ({ ...s, searchQuery: q }))
+                  }
+                  onAddItem={(name) => {
+                    // In real usage this would call a tool; for demo we close the bar
+                    setState((s) => ({
+                      ...s,
+                      addingItem: false,
+                      searchQuery: "",
+                    }));
+                  }}
+                />
+
                 {/* Item Cards */}
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 10 }}
@@ -1165,6 +1561,8 @@ const CartQuantWidget: React.FC = () => {
                 storeBreakdown={basketPlan.storeBreakdown}
                 activeStoreId={state.activeStoreId}
                 onStoreClick={handleStoreClick}
+                storeLocations={state.storeLocations}
+                mapCenter={state.mapCenter}
               />
             )}
           </div>

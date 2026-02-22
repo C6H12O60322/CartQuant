@@ -76,6 +76,8 @@ interface WidgetState {
   error: string | null;
   activeStoreId: string | null;
   customPicks: Record<string, string>; // itemQuery -> altId
+  addingItem: boolean;
+  searchQuery: string;
   storeLocations: StoreLocationsMap | null;
   mapCenter: { lat: number; lng: number } | null;
   locationsLoading: boolean;
@@ -582,6 +584,201 @@ function BasketPlanHero({ plan }: { plan: BasketPlan }) {
   );
 }
 
+// ─── Add Item Bar ───
+
+const SUGGESTED_PRODUCTS = [
+  "rice", "butter", "orange juice", "avocado", "bananas", "cheese",
+  "pasta", "tomatoes", "apples", "salmon", "bacon", "coffee",
+  "peanut butter", "oatmeal", "spinach", "potatoes", "onions", "garlic",
+];
+
+function AddItemBar({
+  isOpen,
+  searchQuery,
+  existingItems,
+  onToggle,
+  onSearchChange,
+  onAddItem,
+}: {
+  isOpen: boolean;
+  searchQuery: string;
+  existingItems: string[];
+  onToggle: () => void;
+  onSearchChange: (q: string) => void;
+  onAddItem: (name: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) inputRef.current.focus();
+  }, [isOpen]);
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          width: "100%",
+          padding: "10px 0",
+          background: "#fff",
+          border: "2px dashed #CBD5E1",
+          borderRadius: 12,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          transition: "all 0.2s ease",
+          color: "#64748B",
+          fontSize: 14,
+          fontWeight: 500,
+        }}
+        onMouseEnter={(e) => {
+          const el = e.currentTarget;
+          el.style.borderColor = "#4F46E5";
+          el.style.color = "#4F46E5";
+          el.style.background = "#FAFAFE";
+        }}
+        onMouseLeave={(e) => {
+          const el = e.currentTarget;
+          el.style.borderColor = "#CBD5E1";
+          el.style.color = "#64748B";
+          el.style.background = "#fff";
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            background: "#EEF2FF",
+            color: "#4F46E5",
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: 1,
+          }}
+        >
+          +
+        </span>
+        Add item to basket
+      </button>
+    );
+  }
+
+  const q = searchQuery.toLowerCase().trim();
+  const suggestions = q
+    ? SUGGESTED_PRODUCTS.filter(
+        (p) => p.includes(q) && !existingItems.includes(p)
+      ).slice(0, 5)
+    : [];
+  // Allow typed entry if >= 2 chars and not already in basket
+  if (q.length >= 2 && !existingItems.includes(q) && !suggestions.includes(q)) {
+    suggestions.unshift(q);
+  }
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 12,
+        padding: "12px 16px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+        border: "1px solid #E2E8F0",
+        animation: "fadeIn 0.2s ease",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ color: "#94A3B8", fontSize: 16, flexShrink: 0 }}>
+          &#128269;
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onToggle();
+            if (e.key === "Enter" && q) onAddItem(q);
+          }}
+          placeholder="Search for a product (e.g. rice, butter, orange juice...)"
+          style={{
+            flex: 1,
+            border: "none",
+            outline: "none",
+            fontSize: 14,
+            color: "#0F172A",
+            background: "transparent",
+            padding: "4px 0",
+          }}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "#94A3B8",
+            fontSize: 18,
+            padding: "0 4px",
+            lineHeight: 1,
+            flexShrink: 0,
+          }}
+        >
+          &times;
+        </button>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div
+          style={{
+            marginTop: 8,
+            borderTop: "1px solid #F1F5F9",
+            paddingTop: 6,
+          }}
+        >
+          {suggestions.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onAddItem(name)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "8px 4px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 13,
+                color: "#334155",
+                borderRadius: 8,
+                transition: "background 0.1s ease",
+                textAlign: "left",
+                textTransform: "capitalize",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "#F8FAFC";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = "none";
+              }}
+            >
+              <span style={{ color: "#4F46E5", fontSize: 14 }}>+</span>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Overview: Item Card ───
 
 function OverviewItemCard({
@@ -989,6 +1186,8 @@ const CartQuantWidget: React.FC = () => {
       error: null,
       activeStoreId: null,
       customPicks: {},
+      addingItem: false,
+      searchQuery: "",
       storeLocations: null,
       mapCenter: null,
       locationsLoading: false,
@@ -1278,6 +1477,31 @@ const CartQuantWidget: React.FC = () => {
               >
                 {/* Basket Plan Hero */}
                 {basketPlan && <BasketPlanHero plan={basketPlan} />}
+
+                {/* Add Item Button / Search Bar */}
+                <AddItemBar
+                  isOpen={state.addingItem}
+                  searchQuery={state.searchQuery}
+                  existingItems={state.results?.items.map((i) => i.query) ?? []}
+                  onToggle={() =>
+                    setState((s) => ({
+                      ...s,
+                      addingItem: !s.addingItem,
+                      searchQuery: "",
+                    }))
+                  }
+                  onSearchChange={(q) =>
+                    setState((s) => ({ ...s, searchQuery: q }))
+                  }
+                  onAddItem={(name) => {
+                    // In real usage this would call a tool; for demo we close the bar
+                    setState((s) => ({
+                      ...s,
+                      addingItem: false,
+                      searchQuery: "",
+                    }));
+                  }}
+                />
 
                 {/* Item Cards */}
                 <div

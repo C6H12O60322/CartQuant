@@ -221,6 +221,8 @@ var state = {
   selectedItemQuery: null,
   activeStoreId: null,
   customPicks: {},
+  addingItem: false,
+  searchQuery: "",
 };
 
 var leafletMap = null;
@@ -293,6 +295,103 @@ function buildPlan() {
     avgTrendDirection: avgChange > 0.5 ? "rising" : avgChange < -0.5 ? "falling" : "flat",
     savings: Math.round(savings * 100) / 100,
   };
+}
+
+// ─── ADD ITEM LOGIC ───
+
+// Predefined suggestions the user can search for (some already in basket, some new)
+var AVAILABLE_PRODUCTS = [
+  "rice", "butter", "orange juice", "avocado", "bananas", "cheese",
+  "pasta", "tomatoes", "apples", "salmon", "bacon", "coffee",
+  "peanut butter", "oatmeal", "spinach", "potatoes", "onions", "garlic"
+];
+
+function renderSuggestions() {
+  var sugBox = document.getElementById("add-item-suggestions");
+  if (!sugBox) return;
+  sugBox.innerHTML = "";
+  var q = state.searchQuery.toLowerCase().trim();
+  if (!q) return;
+
+  // Filter suggestions that match and are NOT already in basket
+  var matches = AVAILABLE_PRODUCTS.filter(function(p) {
+    return p.indexOf(q) !== -1 && DEMO_ITEMS.indexOf(p) === -1;
+  });
+  // Also allow exact typed entry if not already in basket
+  if (q.length >= 2 && DEMO_ITEMS.indexOf(q) === -1 && matches.indexOf(q) === -1) {
+    matches.unshift(q);
+  }
+  if (matches.length === 0) return;
+
+  var list = document.createElement("div");
+  list.style.cssText = "margin-top:8px;border-top:1px solid #F1F5F9;padding-top:6px;";
+
+  var shown = matches.slice(0, 5);
+  for (var si = 0; si < shown.length; si++) {
+    (function(name) {
+      var item = document.createElement("button");
+      item.style.cssText = "display:flex;align-items:center;gap:8px;width:100%;padding:8px 4px;background:none;border:none;cursor:pointer;font-size:13px;color:#334155;font-family:inherit;border-radius:8px;transition:background 0.1s ease;text-align:left;";
+      item.innerHTML = '<span style="color:#4F46E5;font-size:14px;">+</span> <span style="text-transform:capitalize;">' + esc(name) + '</span>';
+      item.onmouseenter = function() { item.style.background = "#F8FAFC"; };
+      item.onmouseleave = function() { item.style.background = "none"; };
+      item.onclick = function() { addNewItem(name); };
+      list.appendChild(item);
+    })(shown[si]);
+  }
+  sugBox.appendChild(list);
+}
+
+function generateMockAlternatives(itemName) {
+  // Generate 5 realistic alternatives across the 5 stores
+  var stores = ["Trader Joe's", "Whole Foods", "Safeway", "Kroger", "Target"];
+  var brands = ["Store Brand", "Premium Select", "Signature", "Great Value", "Good & Gather"];
+  var basePrices = [3.49, 5.99, 3.99, 2.79, 3.89];
+  var scores = [82, 91, 70, 65, 76];
+  var alts = [];
+  for (var i = 0; i < stores.length; i++) {
+    var capName = itemName.charAt(0).toUpperCase() + itemName.slice(1);
+    alts.push({
+      product: {
+        name: brands[i] + " " + capName,
+        brand: brands[i],
+        size: "1 pkg",
+        store: stores[i],
+        priceUsd: basePrices[i] + Math.round(Math.random() * 200) / 100
+      },
+      health: {
+        score: scores[i] + Math.floor(Math.random() * 6 - 3),
+        flags: scores[i] < 70 ? ["processed"] : [],
+        summary: scores[i] >= 80 ? "Good quality, minimal additives." : scores[i] >= 60 ? "Acceptable quality." : "Contains some processed ingredients."
+      },
+      prediction: {
+        direction: ["flat", "rising", "falling"][Math.floor(Math.random() * 3)],
+        percentChange: Math.round(Math.random() * 30) / 10,
+        confidence: 60 + Math.floor(Math.random() * 30),
+        recommendation: "Standard pricing expected."
+      },
+      ingredients: scores[i] >= 80
+        ? [capName, "Natural Ingredients"]
+        : [capName, "Water", "Salt", "Natural Flavors", "Preservatives"]
+    });
+  }
+  return alts;
+}
+
+function addNewItem(itemName) {
+  itemName = itemName.toLowerCase().trim();
+  if (!itemName || DEMO_ITEMS.indexOf(itemName) !== -1) {
+    // Already in basket or empty
+    state.addingItem = false;
+    state.searchQuery = "";
+    render();
+    return;
+  }
+  // Add to DEMO_ITEMS and generate alternatives
+  DEMO_ITEMS.push(itemName);
+  allItemAlternatives[itemName] = generateMockAlternatives(itemName);
+  state.addingItem = false;
+  state.searchQuery = "";
+  render();
 }
 
 // ─── RENDER ───
@@ -402,6 +501,73 @@ function renderOverview(container) {
   }
 
   container.appendChild(hero);
+
+  // ─── Add Item Button / Search Bar ───
+  var addRow = document.createElement("div");
+  addRow.style.cssText = "margin-bottom:12px;";
+
+  if (!state.addingItem) {
+    // Collapsed: show + button
+    var addBtn = document.createElement("button");
+    addBtn.style.cssText = "width:100%;padding:10px 0;background:#fff;border:2px dashed #CBD5E1;border-radius:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.2s ease;color:#64748B;font-size:14px;font-weight:500;font-family:inherit;";
+    addBtn.innerHTML = '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#EEF2FF;color:#4F46E5;font-size:18px;font-weight:700;line-height:1;">+</span> Add item to basket';
+    addBtn.onmouseenter = function() { addBtn.style.borderColor = "#4F46E5"; addBtn.style.color = "#4F46E5"; addBtn.style.background = "#FAFAFE"; };
+    addBtn.onmouseleave = function() { addBtn.style.borderColor = "#CBD5E1"; addBtn.style.color = "#64748B"; addBtn.style.background = "#fff"; };
+    addBtn.onclick = function() {
+      state.addingItem = true;
+      state.searchQuery = "";
+      render();
+      // Focus the input after render
+      setTimeout(function() {
+        var inp = document.getElementById("add-item-input");
+        if (inp) inp.focus();
+      }, 50);
+    };
+    addRow.appendChild(addBtn);
+  } else {
+    // Expanded: search bar
+    var searchWrap = document.createElement("div");
+    searchWrap.className = "fade-slide-in";
+    searchWrap.style.cssText = "background:#fff;border-radius:12px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);border:1px solid #E2E8F0;";
+
+    var searchRow = document.createElement("div");
+    searchRow.style.cssText = "display:flex;align-items:center;gap:8px;";
+
+    var searchIcon = document.createElement("span");
+    searchIcon.style.cssText = "color:#94A3B8;font-size:16px;flex-shrink:0;";
+    searchIcon.innerHTML = "&#128269;";
+
+    var searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.id = "add-item-input";
+    searchInput.placeholder = "Search for a product (e.g. rice, butter, orange juice...)";
+    searchInput.value = state.searchQuery;
+    searchInput.style.cssText = "flex:1;border:none;outline:none;font-size:14px;font-family:inherit;color:#0F172A;background:transparent;padding:4px 0;";
+    searchInput.oninput = function() { state.searchQuery = searchInput.value; renderSuggestions(); };
+    searchInput.onkeydown = function(e) {
+      if (e.key === "Escape") { state.addingItem = false; state.searchQuery = ""; render(); }
+      if (e.key === "Enter" && searchInput.value.trim()) { addNewItem(searchInput.value.trim().toLowerCase()); }
+    };
+
+    var closeBtn = document.createElement("button");
+    closeBtn.style.cssText = "background:none;border:none;cursor:pointer;color:#94A3B8;font-size:18px;padding:0 4px;line-height:1;font-family:inherit;flex-shrink:0;";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.onclick = function() { state.addingItem = false; state.searchQuery = ""; render(); };
+
+    searchRow.appendChild(searchIcon);
+    searchRow.appendChild(searchInput);
+    searchRow.appendChild(closeBtn);
+    searchWrap.appendChild(searchRow);
+
+    // Suggestions dropdown
+    var sugBox = document.createElement("div");
+    sugBox.id = "add-item-suggestions";
+    sugBox.style.cssText = "margin-top:0;";
+    searchWrap.appendChild(sugBox);
+
+    addRow.appendChild(searchWrap);
+  }
+  container.appendChild(addRow);
 
   // Item Cards
   for (var i = 0; i < DEMO_ITEMS.length; i++) {

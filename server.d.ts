@@ -76,6 +76,9 @@ export interface SelectedProduct {
   size: string;
   store: string;
   priceUsd: number;
+  imageUrl?: string;
+  description?: string;
+  url?: string;
 }
 
 export interface HealthInfo {
@@ -120,4 +123,29 @@ export interface CompareBasketResponse {
   mode: BasketMode;
   plan: BasketPlan;
   items: BasketItemWithAlts[];
+}
+
+// --- Geocoding & Store Location types ---
+
+export interface GeocodingResult {
+  lat: number;
+  lng: number;
+  formattedAddress: string;
+}
+
+export interface StoreLocation {
+  name: string;
+  placeId: string;
+  address: string;
+  lat: number;
+  lng: number;
+  rating: number | null;
+  openNow: boolean | null;
+}
+
+export interface FindStoresResult {
+  center: { lat: number; lng: number };
+  radiusMeters: number;
+  stores: Record<string, StoreLocation[]>;
+  totalLocations: number;
 }

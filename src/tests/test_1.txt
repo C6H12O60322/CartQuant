@@ -1,0 +1,201 @@
+════════════════════════════════════════════════════════════════════════════════
+  CARTQUANT FULL FLOW TEST
+  Firecrawl configured: true
+════════════════════════════════════════════════════════════════════════════════
+
+
+════════════════════════════════════════════════════════════════════════════════
+  TEST 1: Direct Scraper — searchAllStores('almond milk')
+════════════════════════════════════════════════════════════════════════════════
+  Firecrawl configured: true
+
+  Safeway (safeway): 0 products
+
+  Trader Joe's (traderjoes): 2 products
+    • Premium Milk & Dark Chocolate Covered Almonds
+      Price: $7.99/16 Oz
+      Brand: Trader Joe's
+      Image: https://www.traderjoes.com/content/dam/trjo/products/m21002/56016.png/jcr:conten...
+      Desc:  Milk and dark chocolate covered almonds....
+      URL:   https://www.traderjoes.com/home/products/pdp/premium-milk-dark-chocolate-covered...
+    • Pound Plus Milk Chocolate Bar with Almonds
+      Price: $7.99/17.6 Oz
+      Brand: Trader Joe's
+      Image: https://www.traderjoes.com/content/dam/trjo/products/m21002/20469.png/jcr:conten...
+      Desc:  Milk chocolate bar with almonds....
+      URL:   https://www.traderjoes.com/home/products/pdp/pound-plus-milk-chocolate-bar-with-...
+
+  Target (target): 2 products
+    • Silk Vanilla Almond Milk - 0.5gal
+      Price: $3.49($0.05/fluid ounce)
+      Brand: Silk
+      Image: https://target.scene7.com/is/image/Target/GUEST_8ad2db5d-5004-4e5c-881a-183830d8...
+      Desc:  Highly rated...
+      URL:   https://www.target.com/p/silk-milk/-/A-94770051?preselect=14936366#lnk=sametab...
+    • Silk High Protein Gluten Free Soy Milk - 48 fl oz
+      Price: $5.29
+      Brand: Silk
+      Image: https://target.scene7.com/is/image/Target/GUEST_70b55453-0e67-4d66-9361-885b0eb3...
+      Desc:  New at target...
+      URL:   https://www.target.com/p/silk-high-protein-gluten-free-soy-milk-48-fl-oz/-/A-100...
+
+
+
+════════════════════════════════════════════════════════════════════════════════
+  TEST: compare-basket — mode="balanced", items=[milk, eggs, bread]
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+  MODE: BALANCED
+════════════════════════════════════════════════════════════════════════════════
+
+  PLAN SUMMARY
+  Best plan: Safeway for 1 item, Trader Joe's for 1 item, Target for 1 item
+  Total: $11.31
+  Savings: Estimated savings vs highest-price options: $3.83
+  Prediction: flat 0.43% (conf: 45%)
+  Tip: Balanced plan selected across price and quality.
+
+  STORE BREAKDOWN
+    Safeway: milk → $4.58
+    Trader Joe's: eggs → $3.49
+    Target: bread → $3.24
+
+────────────────────────────────────────────────────────────────────────────────
+  ITEM: "milk" — 3 alternatives
+────────────────────────────────────────────────────────────────────────────────
+  1. Safeway ★ RECOMMENDED
+     Name:        Milk
+     Brand:       Safeway
+     Price:       $4.58
+     Image URL:   (none)
+     Description: (none)
+     Product URL: (none)
+     Health:      70/100 — Scraping failed for Safeway: Search failed: Failed to scrape URL. Status code: 408. Error: The scrape operation timed out before completing. This happens when a page takes too long to load, render, or process. Possible causes: (1) The website is slow or unresponsive, (2) The page has heavy JavaScript that takes time to execute, (3) The page is very large or has many resources to load, (4) Network latency is high. To fix this, try increasing the timeout parameter in your scrape request, or if using actions, ensure your selectors are correct and the page is ready before actions are executed.
+     Prediction:  flat 0.5% (conf: 40%)
+     Tip:         Fallback estimate. Could not retrieve live data.
+
+  2. Trader Joe's
+     Name:        Organic Milk A2/A2
+     Brand:       Trader Joe's
+     Price:       $5.99
+     Image URL:   https://www.traderjoes.com/content/dam/trjo/products/m20301/80971.png/jcr:content/renditions/cq5dam.web.1280.1280
+     Description: Organic Milk A2/A2
+     Product URL: https://www.traderjoes.com/home/products/pdp/organic-milk-a2a2-080971
+     Health:      82/100 — Scraped from Trader Joe's. Health score estimated from product keywords.
+     Prediction:  flat 2% (conf: 55%)
+     Tip:         Live price captured. Trend requires historical data.
+
+  3. Target
+     Name:        Fairlife Lactose-Free Whole Milk - 52 fl oz
+     Brand:       fairlife
+     Price:       $5.39
+     Image URL:   https://target.scene7.com/is/image/Target/GUEST_0ab839f6-7a42-496f-b6a5-76db2c507ba9?qlt=65&fmt=webp&hei=350&wid=350
+     Description: Highly rated
+     Product URL: https://www.target.com/p/fairlife-lactose-free-milk/-/A-94756488?preselect=48626857#lnk=sametab
+     Health:      70/100 — Scraped from Target. Health score estimated from product keywords.
+     Prediction:  rising 2.9% (conf: 55%)
+     Tip:         Live price captured. Trend requires historical data.
+
+────────────────────────────────────────────────────────────────────────────────
+  ITEM: "eggs" — 3 alternatives
+────────────────────────────────────────────────────────────────────────────────
+  1. Trader Joe's ★ RECOMMENDED
+     Name:        Kramer Farms Cage Free Hard-Boiled Eggs
+     Brand:       Kramer Farms
+     Price:       $3.49
+     Image URL:   https://www.traderjoes.com/content/dam/trjo/products/m20304/81451.png/jcr:content/renditions/cq5dam.web.1280.1280
+     Description: Cage free hard-boiled eggs.
+     Product URL: https://www.traderjoes.com/home/products/pdp/kramer-farms-cage-free-hard-boiled-eggs-081451
+     Health:      70/100 — Scraped from Trader Joe's. Health score estimated from product keywords.
+     Prediction:  flat 0.3% (conf: 55%)
+     Tip:         Live price captured. Trend requires historical data.
+
+  2. Safeway
+     Name:        Eggs
+     Brand:       Safeway
+     Price:       $3.91
+     Image URL:   (none)
+     Description: (none)
+     Product URL: (none)
+     Health:      70/100 — No results found on Safeway.
+     Prediction:  flat 0.5% (conf: 40%)
+     Tip:         Fallback estimate. Could not retrieve live data.
+
+  3. Target
+     Name:        Eggs
+     Brand:       Target
+     Price:       $4.66
+     Image URL:   (none)
+     Description: (none)
+     Product URL: (none)
+     Health:      70/100 — Scraping failed for Target: Search failed: Failed to scrape URL. Status code: 408. Error: The scrape operation timed out before completing. This happens when a page takes too long to load, render, or process. Possible causes: (1) The website is slow or unresponsive, (2) The page has heavy JavaScript that takes time to execute, (3) The page is very large or has many resources to load, (4) Network latency is high. To fix this, try increasing the timeout parameter in your scrape request, or if using actions, ensure your selectors are correct and the page is ready before actions are executed.
+     Prediction:  flat 0.5% (conf: 40%)
+     Tip:         Fallback estimate. Could not retrieve live data.
+
+────────────────────────────────────────────────────────────────────────────────
+  ITEM: "bread" — 3 alternatives
+────────────────────────────────────────────────────────────────────────────────
+  1. Target ★ RECOMMENDED
+     Name:        Bread
+     Brand:       Target
+     Price:       $3.24
+     Image URL:   (none)
+     Description: (none)
+     Product URL: (none)
+     Health:      70/100 — Scraping failed for Target: Search failed: Failed to scrape URL. Status code: 408. Error: The scrape operation timed out before completing. This happens when a page takes too long to load, render, or process. Possible causes: (1) The website is slow or unresponsive, (2) The page has heavy JavaScript that takes time to execute, (3) The page is very large or has many resources to load, (4) Network latency is high. To fix this, try increasing the timeout parameter in your scrape request, or if using actions, ensure your selectors are correct and the page is ready before actions are executed.
+     Prediction:  flat 0.5% (conf: 40%)
+     Tip:         Fallback estimate. Could not retrieve live data.
+
+  2. Safeway
+     Name:        Bread
+     Brand:       Safeway
+     Price:       $3.89
+     Image URL:   (none)
+     Description: (none)
+     Product URL: (none)
+     Health:      70/100 — No results found on Safeway.
+     Prediction:  flat 0.5% (conf: 40%)
+     Tip:         Fallback estimate. Could not retrieve live data.
+
+  3. Trader Joe's
+     Name:        Sliced Porridge Bread
+     Brand:       Trader Joe's
+     Price:       $4.49
+     Image URL:   https://www.traderjoes.com/content/dam/trjo/products/m20101/83034.png/jcr:content/renditions/cq5dam.web.1280.1280
+     Description: Sliced Porridge Bread
+     Product URL: https://www.traderjoes.com/home/products/pdp/sliced-porridge-bread-083034
+     Health:      70/100 — Scraped from Trader Joe's. Health score estimated from product keywords.
+     Prediction:  flat 1.1% (conf: 55%)
+     Tip:         Live price captured. Trend requires historical data.
+
+  (completed in 60.3s)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  TEST: get-product-details
+════════════════════════════════════════════════════════════════════════════════
+  URL: https://www.traderjoes.com/home/products/pdp/organic-milk-a2a2-080971
+  Store: traderjoes
+
+  RESULT: null (scraping failed or no data extracted)
+
+  (completed in 7.0s)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  WIDGET DATA VALIDATION
+════════════════════════════════════════════════════════════════════════════════
+
+  Total items:        3
+  Total alternatives: 9
+  With image URL:     4/9 (44%)
+  With description:   4/9 (44%)
+  With product URL:   4/9 (44%)
+
+  ✅ All widget data fields are present and valid!
+
+
+════════════════════════════════════════════════════════════════════════════════
+  TEST: compare-basket — mode="cheapest", items=[milk, eggs, bread]
+════════════════════════════════════════════════════════════════════════════════

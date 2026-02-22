@@ -18,11 +18,12 @@
     "dev": "mcp-use dev",
     "start": "mcp-use start",
     "deploy": "mcp-use deploy",
-    "traderjoes:start": "cross-env NODE_ENV=production node dist/src/mcp-servers/traderjoes/server.js",
-    "traderjoes:test": "npx tsx src/mcp-servers/traderjoes/tests/test-client.ts"
+    "test:flow": "npx tsx src/tests/test-full-flow.ts",
+    "grocery:start": "node dist/src/mcp-servers/grocery-scraper/server.js",
+    "grocery:test": "npx tsx src/mcp-servers/grocery-scraper/tests/test-client.ts"
   },
   "dependencies": {
-    "@mendable/firecrawl-js": "^4.13.0",
+    "@mendable/firecrawl-js": "^1.0.0",
     "@openai/apps-sdk-ui": "^0.2.1",
     "@tanstack/react-query": "^5.90.21",
     "cors": "^2.8.6",
@@ -40,7 +41,6 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
-    "cross-env": "^10.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

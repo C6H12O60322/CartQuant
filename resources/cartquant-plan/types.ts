@@ -63,6 +63,9 @@ export const selectedProductSchema = z.object({
   size: z.string(),
   store: z.string(),
   priceUsd: z.number(),
+  imageUrl: z.string().optional(),
+  description: z.string().optional(),
+  url: z.string().optional(),
 });
 export type SelectedProduct = z.infer<typeof selectedProductSchema>;
 
@@ -87,6 +90,7 @@ export const itemAlternativeSchema = z.object({
   product: selectedProductSchema,
   health: healthInfoSchema,
   prediction: predictionInfoSchema,
+  ingredients: z.array(z.string()).default([]),
 });
 export type ItemAlternative = z.infer<typeof itemAlternativeSchema>;
 

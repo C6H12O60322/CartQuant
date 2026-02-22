@@ -76,6 +76,9 @@ export interface SelectedProduct {
   size: string;
   store: string;
   priceUsd: number;
+  imageUrl?: string;
+  description?: string;
+  url?: string;
 }
 
 export interface HealthInfo {
